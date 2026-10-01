@@ -4,6 +4,8 @@
 #
 #   ./run.sh                 one run, into out/<date>/
 #   ./run.sh --bump          first move the pin to the library's main
+#   ./run.sh --no-render     the scorecard and the row only
+#   PULSE_CAP_S=300          the per-subject time cap for the renders
 #
 # Rules (fable-plans/active/the-pulse-is-a-consumer, in the library):
 #   - every number comes from the library's scorecard tool, every frame from the
@@ -49,4 +51,40 @@ PY
 grep -v "^$DATE," "$HIST" > "$HIST.tmp" && mv "$HIST.tmp" "$HIST"
 echo "$ROW" >> "$HIST"
 echo "run: scorecard in $OUT/scorecard.txt; history row: $ROW"
-echo "run: renders are step 1 of the plan (not yet)"
+# STEP 1, THE RENDERS: the library's own sheet and close-up for every subject
+# that has a card, each under a per-subject time cap, into out/<date>/<id>/.
+# The library decides every frame (tools/rung-sheet.py, tools/closeup.sh); this
+# loop only names the subject and the directory. A subject that fails gets a
+# manifest row that says so, and the run goes on. `--no-render` skips it.
+if [ "${PULSE_RENDER:-1}" = "1" ] && [ "${1:-}" != "--no-render" ] && [ "${2:-}" != "--no-render" ]; then
+  command -v godot >/dev/null 2>&1 || fail_row "godot-missing"
+  command -v xvfb-run >/dev/null 2>&1 || fail_row "xvfb-missing"
+  # A fresh checkout has no class cache; the import builds it (seconds) and is
+  # a no-op when it exists for this pin.
+  if [ ! -f library/.godot/global_script_class_cache.cfg ] || [ "$(cat library/.godot/pulse-pin 2>/dev/null)" != "$PIN" ]; then
+    ( cd library && godot --headless --path . --import >/dev/null 2>&1 ) || fail_row "import"
+    echo "$PIN" > library/.godot/pulse-pin
+  fi
+  CAP="${PULSE_CAP_S:-300}"
+  MANIFEST="$OUT/manifest.json"
+  echo "[" > "$MANIFEST"; first=1; n=0; failed=0; t0=$(date +%s)
+  for card in library/generators/*/*.card.json; do
+    id="$(python3 -c "import json,sys; print(json.load(open(sys.argv[1]))['id'])" "$card" 2>/dev/null)" || continue
+    [ -n "$id" ] || continue
+    dir="$OUT/${id//\//_}"; mkdir -p "$dir"
+    s=$(date +%s); status="ok"
+    ( cd library && timeout "$CAP" python3 tools/rung-sheet.py "$id" --out "$dir/sheet.jpg" --derive none ) > "$dir/sheet.log" 2>&1 || status="sheet-failed"
+    if [ "$status" = "ok" ]; then
+      ( cd library && SHOT_DIR="$dir" timeout "$CAP" tools/closeup.sh "$id" ) > "$dir/closeup.log" 2>&1 || status="closeup-failed"
+    fi
+    secs=$(( $(date +%s) - s )); n=$((n+1)); [ "$status" = "ok" ] || failed=$((failed+1))
+    images="$(cd "$dir" && ls *.jpg *.png 2>/dev/null | python3 -c "import json,sys; print(json.dumps(sys.stdin.read().split()))")"
+    [ $first = 1 ] || echo "," >> "$MANIFEST"; first=0
+    printf '  {"id": "%s", "status": "%s", "seconds": %d, "images": %s}' "$id" "$status" "$secs" "$images" >> "$MANIFEST"
+    echo "render $id: $status in ${secs}s"
+  done
+  echo "" >> "$MANIFEST"; echo "]" >> "$MANIFEST"
+  echo "run: rendered $n subjects, $failed failed, in $(( $(date +%s) - t0 )) s; manifest $MANIFEST"
+else
+  echo "run: renders skipped (--no-render)"
+fi
