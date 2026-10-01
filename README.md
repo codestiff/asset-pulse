@@ -13,12 +13,22 @@ plan it executes is the library's
 
 ## Run
 
-    ./run.sh            # sync to the pin, print the scorecard, append today's row
-    ./run.sh --bump     # first move the pin to the library's main
+    ./run.sh                          sync to the pin, scorecard, history row, renders, page
+    ./run.sh --bump                   first move the pin to the library's main
+    ./run.sh --no-render              the scorecard and the row only
+    PULSE_DERIVE=none ./run.sh        drawn today only: no derivation search (fast)
+    PULSE_ONLY="built/vase" ./run.sh  render one subject, for a manual look
 
-Output lands in `out/<date>/` (gitignored). `history.csv` is the only generated
-file committed: one row per run, the day's totals, and `failed:<step>` when a
-run did not finish.
+Output lands in `out/<date>/` (gitignored): `scorecard.txt`, `manifest.json`,
+one directory per subject (the library's sheet pages, `sheet-bands.json`, the
+close-up) and `site/` -- `index.html` and one page per subject, static, images
+under 100 KB. `history.csv` is the only generated file committed: one row per
+run, the day's totals, and `failed:<step>` when a run did not finish.
+
+The derivation search is the slow part: seconds a band on a small solid,
+about a minute a band on a tree (the rowan's whole sheet took 6 min, the
+pine's 4). Each band's search is capped by the sheet (`PULSE_BAND_CAP_S`,
+300) and each subject by the run (`PULSE_CAP_S`, 1800).
 
 ## Rules
 
@@ -32,9 +42,13 @@ run did not finish.
 
 ## Steps (the plan's)
 
-0. the pin, the sync, the scorecard, the first history row -- this
-1. the renders: the library's per-band sheet and close-up for every subject
-2. the page: one per subject plus an index with the totals and their trend
-3. publishing: images to R2, the site to Pages, Access in front of both
-4. the schedule: a daily Routine, then the nightly runner's cron
-5. the per-band sheet, when the library lands it
+0. the pin, the sync, the scorecard, the first history row -- done
+1. the renders: the library's per-band sheet and close-up for every subject --
+   written; not yet verified by one full run
+2. the page: one per subject plus an index with the totals and their trend --
+   `tools/site.py`, checked on one subject at phone width; not yet on a full run
+3. publishing: images to R2, the site to Pages, Access in front of both --
+   not started: needs the owner's Cloudflare account and an Access policy
+4. the schedule: a daily Routine, then the nightly runner's cron -- not started
+5. the per-band sheet -- landed in the library (`plans/049` step 3, pinned at
+   6fdc79f); `run.sh` calls it and the page reads its `sheet-bands.json`
