@@ -1,0 +1,4 @@
+# The library checkout at the pin, and every run's output. Only history.csv is
+# committed: one dated row per run, no images, no geometry.
+library/
+out/
