@@ -3,7 +3,7 @@
 A consumer of `codestiff/asset-generators`, pinned in `library.lock`. Read
 `README.md`; the plan is the library's `fable-plans/active/the-pulse-is-a-consumer`.
 
-- Start of every session: `tools/sync-library.sh --bump main && ./run.sh`.
+- The daily run is one command: `./daily.sh` (bump, run, commit, push, report).
 - The library under `library/` is never edited, except by `tools/backlog.sh`:
   the library's own derivation job, its output pushed back through the
   library's gate (the owner, 2026-10-02). A gap goes to the library's `feedback/`.

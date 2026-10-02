@@ -13,6 +13,9 @@ plan it executes is the library's
 
 ## Run
 
+    ./daily.sh                        THE DAILY RUN: everything below, then commit,
+                                      push and print a report -- what a session runs
+
     ./run.sh                          sync to the pin, scorecard, history row, renders, page
     ./run.sh --bump                   first move the pin to the library's main
     ./run.sh --no-render              the scorecard and the row only
