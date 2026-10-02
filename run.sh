@@ -10,6 +10,8 @@
 #   PULSE_BACKLOG=0          skip the derivation backlog (tools/backlog.sh, on by default)
 #   PULSE_DERIVE=none        drawn today only: no derived column
 #   PULSE_ONLY="a/b c/d"     render only these subjects (a manual look)
+#   PULSE_BAKE=0             skip the bake and the catalog (tools/bake.sh, tools/catalog.py)
+#   PULSE_TRANSFER=0         bake without the baked channel (fast, structural only)
 #
 # Rules (fable-plans/active/the-pulse-is-a-consumer, in the library):
 #   - every number comes from the library's scorecard tool, every frame from the
@@ -105,6 +107,16 @@ if [ "${PULSE_RENDER:-1}" = "1" ] && [ "${1:-}" != "--no-render" ] && [ "${2:-}"
   echo "run: rendered $n subjects, $failed failed, in $(( $(date +%s) - t0 )) s; manifest $MANIFEST"
   # STEP 2, THE PAGE: static HTML from this run's output and the history.
   python3 tools/site.py "$OUT" || fail_row "site"
+  # THE CATALOG, the pulse's public half: the explorer's bake of every rung
+  # (tools/bake.sh), then the cards, the 3D view and the free downloads. A
+  # failed bake leaves the private page and the row standing and says so.
+  if [ "${PULSE_BAKE:-1}" = "1" ]; then
+    if BAKE_LOG="$OUT/bake.log" tools/bake.sh; then
+      python3 tools/catalog.py "$OUT" || echo "run: the catalog failed; the pulse's page stands"
+    else
+      echo "run: the bake failed (see $OUT/bake.log); no catalog this run"
+    fi
+  fi
 else
   echo "run: renders skipped (--no-render)"
 fi

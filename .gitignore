@@ -2,3 +2,4 @@
 # committed: one dated row per run, no images, no geometry.
 library/
 out/
+explorer/

@@ -85,6 +85,45 @@ def band_table(bands):
     return "<div class=wrap><table>%s</table></div>" % "".join(rows)
 
 
+TREND = [("covered_hand", "covered by hand", "var(--ok)"), ("covered_library", "by the library", "var(--warn)"),
+         ("uncovered", "uncovered", "var(--bad)")]
+
+
+def trend_svg(history):
+    """The totals over the runs that finished, as lines: drawn from history.csv's
+    numbers only, the y axis 0 to the bands the newest row counts."""
+    rows = [h for h in history if h.get("status") == "ok" and h.get("bands")]
+    if len(rows) < 2:
+        return "<p class=mute>one run so far; the trend starts with the second</p>"
+    w, h, pad = 600, 160, 24
+    top = max(int(r["bands"]) for r in rows) or 1
+    xs = [pad + i * (w - 2 * pad) / (len(rows) - 1) for i in range(len(rows))]
+    y = lambda v: h - pad - (h - 2 * pad) * v / top
+    parts = ["<svg viewBox='0 0 %d %d' width='100%%' role=img aria-label='the totals by run'>" % (w, h),
+             "<line x1=%d y1=%.1f x2=%d y2=%.1f stroke='var(--line)'/>" % (pad, y(0), w - pad, y(0)),
+             "<text x=%d y=%.1f font-size=10 fill='var(--mute)'>%d</text>" % (2, y(top) + 4, top),
+             "<text x=%d y=%.1f font-size=10 fill='var(--mute)'>0</text>" % (2, y(0) + 4)]
+    for key, _, colour in TREND:
+        pts = " ".join("%.1f,%.1f" % (x, y(int(r[key]))) for x, r in zip(xs, rows))
+        parts.append("<polyline fill=none stroke='%s' stroke-width=2 points='%s'/>" % (colour, pts))
+    parts.append("<text x=%d y=%d font-size=10 fill='var(--mute)'>%s</text>" % (pad, h - 6, html.escape(rows[0]["date"])))
+    parts.append("<text x=%d y=%d font-size=10 fill='var(--mute)' text-anchor=end>%s</text>"
+                 % (w - pad, h - 6, html.escape(rows[-1]["date"])))
+    parts.append("</svg>")
+    legend = " ".join("<span style='color:%s'>&#9632;</span> %s" % (c, html.escape(n)) for _, n, c in TREND)
+    return "".join(parts) + "<p class=mute>%s, of %d bands</p>" % (legend, top)
+
+
+def subject_history(root, sid):
+    """The subject's scorecard line on every run whose output is still on disk,
+    newest first -- the library's line copied, never re-scored."""
+    out = []
+    for card in sorted((root / "out").glob("*/scorecard.txt"), reverse=True):
+        line = next((l for l in card.read_text().splitlines() if l.split()[:1] == [sid]), None)
+        out.append((card.parent.name, line))
+    return out
+
+
 def main(argv):
     if len(argv) < 2:
         sys.exit(__doc__)
@@ -125,6 +164,15 @@ def main(argv):
             out = site / "img" / ("%s-%s.jpg" % (slug, Path(name).stem))
             small_jpeg(src, out)
             body.append("<img src='img/%s' alt='%s' loading=lazy>" % (out.name, html.escape(name)))
+        past = subject_history(root, sid)
+        body.append("<h2>history</h2>")
+        if len(past) > 1:
+            body.append("<div class=wrap><table><tr><th>run</th><th>scorecard line</th></tr>%s</table></div>" % "".join(
+                "<tr><td>%s</td><td style='text-align:left'><code>%s</code></td></tr>" % (
+                    html.escape(day), html.escape(" ".join(l.split()[1:])) if l else "<span class=bad>not on the card</span>")
+                for day, l in past))
+        else:
+            body.append("<p class=mute>this is the first run on disk for this subject</p>")
         (site / ("%s.html" % slug)).write_text(page(sid, "".join(body)))
         today = bands.get("today_total") if bands else None
         lib = bands.get("derived_total") if bands else None
@@ -140,6 +188,7 @@ def main(argv):
                     "subjects", "bands", "covered_hand", "covered_library", "uncovered", "fully_covered", "fully_from_rung0"]))
     pin = history[-1]["pin"][:12] if history else "?"
     index = ["<h1>the pulse</h1><p class=mute>%s, library at %s</p>" % (html.escape(run.name), html.escape(pin)),
+             "<h2>the trend</h2>" + trend_svg(history),
              "<h2>the library's totals, newest first</h2><div class=wrap><table>%s</table></div>" % "".join(hist),
              "<h2>subjects</h2>",
              ("<div class=wrap><table><tr><th>subject</th><th>run</th><th>drawn today</th><th>derived</th><th>saving</th></tr>%s</table></div>"

@@ -1,0 +1,49 @@
+#!/bin/bash
+# THE CATALOG'S BAKE: every rung's glTF and the impostor atlases, made by the
+# explorer's own tool exactly as its refresh.sh made them, against the pinned
+# library.
+#
+#   tools/bake.sh                 impostor atlases, then the registry bake with --transfer
+#   PULSE_TRANSFER=0 tools/bake.sh   the structural bake only (fast; no baked channel)
+#
+# The order is refresh.sh's and it is not arbitrary: `tools/impostor.sh` must run
+# before the bake, because the bake only names an atlas already on disk
+# (asset-generators defects/017, 018). Both write only the library's
+# gitignored build/artifacts/; the library's source tree is never touched, and
+# `tools/sync-library.sh --verify` still holds after this.
+set -uo pipefail
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+LIB="$ROOT/library"
+EXP="$ROOT/explorer"
+LOCK="$ROOT/explorer.lock"
+export GIT_TERMINAL_PROMPT=0
+die() { echo "bake: $*" >&2; exit 1; }
+REPO="$(sed -n 's/^repo=//p' "$LOCK")"; PIN="$(sed -n 's/^commit=//p' "$LOCK")"
+[ -n "$REPO" ] && [ -n "$PIN" ] || die "explorer.lock needs repo= and commit="
+[ -d "$LIB/.git" ] || die "no library/ -- run tools/sync-library.sh"
+if [ ! -d "$EXP/.git" ]; then
+  git clone -q "https://github.com/$REPO" "$EXP" || die "clone of $REPO failed"
+fi
+if [ "$(git -C "$EXP" rev-parse HEAD)" != "$PIN" ]; then
+  git -C "$EXP" fetch -q origin "$PIN" 2>/dev/null || git -C "$EXP" fetch -q origin
+  git -C "$EXP" checkout -q --detach "$PIN" || die "the explorer pin $PIN is not on its remote"
+fi
+[ -z "$(git -C "$EXP" status --porcelain)" ] || die "explorer/ has local changes; the pulse never edits it"
+rm -rf "$LIB/build/artifacts"
+echo "bake: impostor atlases (the library's tools/impostor.sh)"
+# The library's impostor.sh hands `xvfb-run` its `ag_godot` shell function,
+# which a child process cannot see (exit 127; filed in the library's feedback/).
+# Until it is fixed, the same tool (tools/impostor.gd) is run through the
+# library's own display guard, `ag_godot_display`, at impostor.sh's screen size
+# and software GL -- the library's functions and settings, nothing chosen here.
+( cd "$LIB" && export LIBGL_ALWAYS_SOFTWARE=1 GALLIUM_DRIVER=llvmpipe AG_SCREEN=512x512x24 \
+  && source tools/guard.sh && source tools/logdir.sh && source tools/import.sh && ag_import \
+  && LOG="$AG_LOGS/impostor.log" && ag_godot_display "$LOG" --path . --rendering-driver opengl3 --script tools/impostor.gd \
+  ; code=$?; grep -E "^  " "$AG_LOGS/impostor.log" | tail -3; exit $code ) \
+  || echo "bake: NO IMPOSTOR ATLASES this run (the library's tools/impostor.gd failed; see its log); the bake goes on and the catalog names every far rung that lacks one"
+ARGS=(--transfer); [ "${PULSE_TRANSFER:-1}" = "0" ] && ARGS=()
+echo "bake: the registry (the explorer's tools/bake-library.sh ${ARGS[*]:-})"
+LOG="${BAKE_LOG:-$ROOT/out/bake.log}" "$EXP/tools/bake-library.sh" "$LIB" "${ARGS[@]}" || die "the registry bake failed"
+[ -f "$LIB/build/artifacts/manifest.json" ] || die "the bake wrote no manifest"
+"$ROOT/tools/sync-library.sh" --verify >/dev/null || die "the bake changed the library's source tree"
+echo "bake: manifest at $LIB/build/artifacts/manifest.json"
