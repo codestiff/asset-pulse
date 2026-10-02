@@ -16,7 +16,8 @@ plan it executes is the library's
     ./run.sh                          sync to the pin, scorecard, history row, renders, page
     ./run.sh --bump                   first move the pin to the library's main
     ./run.sh --no-render              the scorecard and the row only
-    PULSE_DERIVE=none ./run.sh        drawn today only: no derivation search (fast)
+    PULSE_BACKLOG=0 ./run.sh          skip the derivation backlog (a quick look)
+    PULSE_DERIVE=none ./run.sh        drawn today only: no derived column
     PULSE_ONLY="built/vase" ./run.sh  render one subject, for a manual look
 
 Output lands in `out/<date>/` (gitignored): `scorecard.txt`, `manifest.json`,
@@ -25,15 +26,19 @@ close-up) and `site/` -- `index.html` and one page per subject, static, images
 under 100 KB. `history.csv` is the only generated file committed: one row per
 run, the day's totals, and `failed:<step>` when a run did not finish.
 
-The derivation search is the slow part: seconds a band on a small solid,
-about a minute a band on a tree (the rowan's whole sheet took 6 min, the
-pine's 4). Each band's search is capped by the sheet (`PULSE_BAND_CAP_S`,
-300) and each subject by the run (`PULSE_CAP_S`, 1800).
+The derivation search is the slow part and runs once, in the backlog step
+(hours on a full backlog, little on a quiet day); the sheets then read its
+goal table and take seconds each. Each subject's renders are capped by the run
+(`PULSE_CAP_S`, 1800).
 
 ## Rules
 
-- The library is never edited from here. A gap goes to the library's
-  `feedback/`.
+- The library is never edited from here, with one exception: the derivation
+  backlog (`tools/backlog.sh`). The pulse runs the library's own expensive
+  job once a day (the owner, 2026-10-02: pay for it once) and pushes exactly
+  the files that job writes -- the derivation tables and records -- through the
+  library's gate, or to `run/derive-backlog-<date>` when the gate refuses. A
+  gap goes to the library's `feedback/`.
 - No images and no generated geometry in git, here or in the library. Images
   go to the object store (step 3).
 - The pulse reports; it is not a gate on anything.

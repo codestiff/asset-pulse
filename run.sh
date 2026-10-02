@@ -7,15 +7,16 @@
 #   ./run.sh --bump          first move the pin to the library's main
 #   ./run.sh --no-render     the scorecard and the row only
 #   PULSE_CAP_S=1800         the per-subject time cap for the renders
-#   PULSE_BAND_CAP_S=300     the cap on one band's derivation search (the sheet's own)
-#   PULSE_DERIVE=none        drawn today only: no search, no derived column (fast)
+#   PULSE_BACKLOG=0          skip the derivation backlog (tools/backlog.sh, on by default)
+#   PULSE_DERIVE=none        drawn today only: no derived column
 #   PULSE_ONLY="a/b c/d"     render only these subjects (a manual look)
 #
 # Rules (fable-plans/active/the-pulse-is-a-consumer, in the library):
 #   - every number comes from the library's scorecard tool, every frame from the
 #     library's sheet and close-up tools; this script decides nothing about
 #     scoring or rendering;
-#   - nothing generated is committed but history.csv, one dated row per run;
+#   - nothing generated is committed here but history.csv, one dated row per run;
+#     the derivation backlog's records go to the library (tools/backlog.sh);
 #   - a failed run writes a row that says so, never nothing.
 set -uo pipefail
 ROOT="$(cd "$(dirname "$0")" && pwd)"
@@ -36,6 +37,12 @@ if [ "${1:-}" = "--bump" ]; then
 fi
 tools/sync-library.sh || fail_row "sync"
 tools/sync-library.sh --verify || fail_row "verify"
+# THE DERIVATION BACKLOG, PAID ONCE, before the sheets read it (tools/backlog.sh):
+# the library's own job, its records pushed back to the library. PULSE_BACKLOG=0
+# skips it (a quick manual look).
+if [ "${PULSE_BACKLOG:-1}" = "1" ] && [ "${1:-}" != "--no-render" ] && [ "${2:-}" != "--no-render" ]; then
+  tools/backlog.sh || echo "run: the backlog failed; the sheets read the tables as they are"
+fi
 PIN="$(sed -n 's/^commit=//p' library.lock)"
 # THE SCORECARD: the library's tool when it exists (the tooling plan's step 10),
 # the prototype beside the library's plans until then. Run from the library root,
@@ -72,9 +79,9 @@ if [ "${PULSE_RENDER:-1}" = "1" ] && [ "${1:-}" != "--no-render" ] && [ "${2:-}"
   CAP="${PULSE_CAP_S:-1800}"
   # THE PER-BAND SHEET (the plan's step 5, the library's plans/049 step 3): each
   # band drawn today beside the rung derived from rung 0, and its numbers as
-  # sheet-bands.json for the page. The search is the slow part, capped per band
-  # by the sheet itself; PULSE_DERIVE=none leaves it out.
-  SHEET_ARGS=(--derive-cap "${PULSE_BAND_CAP_S:-300}")
+  # sheet-bands.json for the page. The derived column READS the goal table the
+  # backlog step just wrote -- no search here; PULSE_DERIVE=none leaves it out.
+  SHEET_ARGS=()
   [ "${PULSE_DERIVE:-}" = "none" ] && SHEET_ARGS=(--derive none)
   MANIFEST="$OUT/manifest.json"
   echo "[" > "$MANIFEST"; first=1; n=0; failed=0; t0=$(date +%s)
