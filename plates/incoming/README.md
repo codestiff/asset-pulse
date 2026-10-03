@@ -4,3 +4,4 @@ The library's manifest (asset-generators plates/manifest.json) cites a plate by 
 
 - 123182fa5f455ac6-birch-leaf-litter-topdown.jpg: birch leaf litter, top-down, autumn, with birch bark fragments and twigs; 1408x768; 2026-10-03
 - 45b6d9dec133406c-pine-needle-duff-topdown.jpg: pine needle duff, top-down, wet: red-brown fallen needles over dark soil with bark flakes, twigs, a few oak leaves, small stones and grass blades; 1408x768; 2026-10-03
+- 1b9b44374afa4437-twig-litter-topdown.jpg: twig litter, top-down: fallen twigs and small branches crossing over oak leaves, moss patches, bark flakes and small stones; 1408x768; 2026-10-03
