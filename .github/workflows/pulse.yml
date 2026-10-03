@@ -1,0 +1,109 @@
+# THE PULSE'S DAILY RUN ON GITHUB, and the public catalog on GitHub Pages
+# (the owner, 2026-10-03: "If we don't have a license issue, sure, go public").
+#
+# One job: sync the library to its main, the scorecard and the history row,
+# every subject's sheet and close-up, the explorer's bake, the catalog; commit
+# history.csv and the pin; deploy the catalog to Pages. The private pulse page
+# is built too and never deployed here.
+#
+# The catalog is deployed as a Pages ARTIFACT, never committed: this repository
+# keeps no images and no generated geometry in git (CLAUDE.md). Every download
+# carries ATTRIBUTION.txt from provenance and the library's licence texts
+# (docs/press/licences/), and tools/catalog.py refuses to write a plate's bytes
+# or a file over the Pages limit; a larger zip waits for R2.
+#
+# Needs one secret: LIBRARY_TOKEN, a fine-grained token that can READ
+# codestiff/asset-generators and codestiff/asset-explorer (both private). The
+# workflow's own token cannot. Without it the run stops at its first step and
+# says so. Pages must be on with "GitHub Actions" as its source (Settings ->
+# Pages); the deploy job fails with that message otherwise.
+name: pulse
+
+on:
+  schedule:
+    - cron: "37 5 * * *"
+  workflow_dispatch:
+    inputs:
+      backlog:
+        description: "run the derivation backlog (pushes to the library; needs LIBRARY_TOKEN with write)"
+        default: "0"
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pulse
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 350
+    outputs:
+      date: ${{ steps.run.outputs.date }}
+      catalog: ${{ steps.run.outputs.catalog }}
+    steps:
+      - name: the library token
+        env:
+          LIBRARY_TOKEN: ${{ secrets.LIBRARY_TOKEN }}
+        run: |
+          if [ -z "$LIBRARY_TOKEN" ]; then
+            echo "::error::stopped: no LIBRARY_TOKEN secret -- the library and the explorer are private, and this workflow's own token cannot read them. Add a fine-grained token with read access to codestiff/asset-generators and codestiff/asset-explorer as the repository secret LIBRARY_TOKEN."
+            exit 1
+          fi
+          # Only the two private repositories this run reads: the checkout and
+          # the push of this repository keep the workflow's own token.
+          for r in asset-generators asset-explorer; do
+            git config --global url."https://x-access-token:${LIBRARY_TOKEN}@github.com/codestiff/$r".insteadOf "https://github.com/codestiff/$r"
+          done
+      - uses: actions/checkout@v4
+      - name: Godot, a virtual display, Pillow, the library
+        run: |
+          sudo apt-get update -q && sudo apt-get install -y -q xvfb libgl1-mesa-dri >/dev/null
+          bash .claude/hooks/session-start.sh
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      - name: the run
+        id: run
+        env:
+          PULSE_BACKLOG: ${{ github.event.inputs.backlog || '0' }}
+          PULSE_TRANSFER: "0"
+        run: |
+          export PATH="$HOME/.local/bin:$PATH"
+          DATE="$(date -u +%Y-%m-%d)"
+          tools/sync-library.sh --bump main && ./run.sh; code=$?
+          echo "date=$DATE" >> "$GITHUB_OUTPUT"
+          [ -f "out/$DATE/catalog/index.html" ] && echo "catalog=out/$DATE/catalog" >> "$GITHUB_OUTPUT"
+          grep -h "^catalog: " "out/$DATE"/*.log 2>/dev/null | tail -3 || true
+          exit $code
+      - name: commit the day's row and the pin
+        if: always()
+        run: |
+          git config user.name "asset-pulse"
+          git config user.email "asset-pulse@users.noreply.github.com"
+          git add history.csv library.lock
+          git diff --cached --quiet && exit 0
+          git commit -q -m "pulse $(date -u +%Y-%m-%d) (GitHub Actions)"
+          for i in 1 2 3; do git pull -q --rebase origin main && git push -q origin HEAD:main && break; sleep 5; done
+      - name: the catalog, without the private page
+        if: steps.run.outputs.catalog != ''
+        run: |
+          mkdir -p _pages && cp -r "${{ steps.run.outputs.catalog }}/." _pages/
+          rm -f _pages/objects.json
+          du -sh _pages
+      - uses: actions/upload-pages-artifact@v3
+        if: steps.run.outputs.catalog != ''
+        with:
+          path: _pages
+
+  deploy:
+    needs: run
+    if: needs.run.outputs.catalog != ''
+    runs-on: ubuntu-24.04
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - id: deploy
+        uses: actions/deploy-pages@v4
