@@ -5,3 +5,4 @@ The library's manifest (asset-generators plates/manifest.json) cites a plate by 
 - 123182fa5f455ac6-birch-leaf-litter-topdown.jpg: birch leaf litter, top-down, autumn, with birch bark fragments and twigs; 1408x768; 2026-10-03
 - 45b6d9dec133406c-pine-needle-duff-topdown.jpg: pine needle duff, top-down, wet: red-brown fallen needles over dark soil with bark flakes, twigs, a few oak leaves, small stones and grass blades; 1408x768; 2026-10-03
 - 1b9b44374afa4437-twig-litter-topdown.jpg: twig litter, top-down: fallen twigs and small branches crossing over oak leaves, moss patches, bark flakes and small stones; 1408x768; 2026-10-03
+- dd37e991fe729c1f-pine-cones-topdown.jpg: pine cones on the ground, top-down: seven open cones over oak leaves, twigs, bark and gravel. CAUTION for the author: the generator placed the cones in a near-regular ring; use the plate for a cone's form, colour and scale against the leaves, never for placement density or pattern; 1408x768; 2026-10-03
