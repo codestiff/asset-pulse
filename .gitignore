@@ -3,3 +3,4 @@
 library/
 out/
 explorer/
+__pycache__/

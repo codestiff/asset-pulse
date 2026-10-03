@@ -48,15 +48,24 @@ goal table and take seconds each. Each subject's renders are capped by the run
 - The page is private: the owner's login only (step 3). The public face of the
   library is `asset-explorer`, which hands people assets without the code.
 
-## Steps (the plan's)
+## Steps (the plan's, and the release plan's agent D)
 
 0. the pin, the sync, the scorecard, the first history row -- done
 1. the renders: the library's per-band sheet and close-up for every subject --
-   written; not yet verified by one full run
-2. the page: one per subject plus an index with the totals and their trend --
-   `tools/site.py`, checked on one subject at phone width; not yet on a full run
-3. publishing: images to R2, the site to Pages, Access in front of both --
-   not started: needs the owner's Cloudflare account and an Access policy
-4. the schedule: a daily Routine, then the nightly runner's cron -- not started
-5. the per-band sheet -- landed in the library (`plans/049` step 3, pinned at
-   6fdc79f); `run.sh` calls it and the page reads its `sheet-bands.json`
+   verified by one full run 2026-10-02 (pin 93fed38, 37 min, 54 subjects; 17
+   fail in the library's tools, filed in its feedback/)
+2. the page: one per subject (scorecard row, band sheet, history) and an index
+   with the totals and their trend -- `tools/site.py`, checked at 390 px
+3. the catalog, the pulse's public half: `tools/bake.sh` (asset-explorer's
+   bake, pinned in `explorer.lock`, run as its refresh.sh ran it), then
+   `tools/catalog.py`: a card per subject, the close-ups, a `<model-viewer>`
+   of rung 0, a free zip per subject (every rung's glTF, the atlas when there
+   is one, `ATTRIBUTION.txt` from provenance), the request form to the intake,
+   the paid link to the downloads URL; objects named by content hash for the
+   `catalog` bucket. Verified locally against `tools/edge-stub.py`.
+4. publishing: `tools/publish.sh` -- objects to R2, the pulse to Pages behind
+   Access (refused without an Access app on its hostname), the catalog to the
+   `asset-explorer` Pages project. Written; stops with exit 3 until the
+   environment has CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID (the owner's
+   hand action 1), and refuses while the edge URLs are still stubs.
+5. the schedule: a daily Routine running `./daily.sh`
