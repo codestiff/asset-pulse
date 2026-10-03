@@ -29,7 +29,7 @@ fi
 PUB="skipped (no run output)"
 if [ -f "$OUT/site/index.html" ]; then
   tools/publish.sh "$OUT" >>"$LOG" 2>&1; p=$?
-  case "$p" in 0) PUB="published" ;; 3) PUB="NOT published: no Cloudflare token in this environment" ;; *) PUB="FAILED (exit $p) -- see $LOG" ;; esac
+  case "$p" in 0) PUB="published" ;; 3) PUB="NOT published: $(grep -E "^publish: stopped" "$LOG" | tail -1 | sed "s/^publish: //")" ;; *) PUB="FAILED (exit $p) -- see $LOG" ;; esac
 fi
 # THE REPORT.
 echo "== asset-pulse $DATE: run exit $RUN, $((SECONDS / 60)) min"

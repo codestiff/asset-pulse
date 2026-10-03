@@ -59,19 +59,22 @@ goal table and take seconds each. Each subject's renders are capped by the run
 3. the catalog, the pulse's public half: `tools/bake.sh` (asset-explorer's
    bake, pinned in `explorer.lock`, run as its refresh.sh ran it), then
    `tools/catalog.py`: one static page per subject from the library's committed
-   JSON (class, size, rungs, taxon, use) and the rendered band sheets and
-   close-ups, a `<model-viewer>` of rung 0, the 1080 bake free as a zip (every
-   rung's glTF, the atlas when there is one, `ATTRIBUTION.txt` from
-   provenance), finer builds pay-what-you-want on itch (`itch_url` in
-   `catalog.json`, empty until the page exists), the request form posting to
-   agent A's intake. Objects are named by content hash for the `catalog`
-   bucket. Verified locally 2026-10-03 at library 552e8ca against
-   `tools/edge-stub.py`.
+   JSON (class, size, rungs, ladder end, taxon, use), its close-ups and a
+   `<model-viewer>` of rung 0; two numbers from the scorecard (draw cost at the
+   1080 baseline, error at the finest affordable band); the 1080 bake free as
+   a zip of every rung's glTF, the impostor and its atlas when the ladder ends
+   in one, `ATTRIBUTION.txt` (the card's plates, contributor and licence, in
+   the library's own form) and the runtime's open LICENSE. A subject whose
+   ladder ends in an impostor is offered only when its bake carries the
+   impostor: the ladder end is part of the asset (the owner, 2026-10-03).
+   Finer builds are pay-what-you-want on itch (`ITCH_URL`); the request form
+   posts to agent A's intake. Objects are named by content hash for the
+   `catalog` bucket. Verified locally 2026-10-03 at library 552e8ca.
 4. publishing: `tools/publish.sh` -- objects to R2, the pulse to Pages behind
-   Access on `pulse.<zone>` (refused without an Access app on it), the catalog
-   to the `asset-explorer` Pages project on the hostname its `wrangler.toml`
-   names (the only file of the retired explorer app this touches). Stops with
-   exit 3 and a message until the environment has CLOUDFLARE_API_TOKEN and
-   CLOUDFLARE_ACCOUNT_ID (the owner's hand action 1); needs EDGE_ZONE and
-   CATALOG_PUBLIC_BASE too, and refuses a request form on a local URL.
+   Access on `pulse.<zone>`, the catalog to the `asset-explorer` Pages project
+   on its existing hostname (`asset-explorer.pages.dev`, from the explorer's
+   `wrangler.toml`, the only file of the retired app this touches). It reads
+   CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID, EDGE_ZONE, CATALOG_PUBLIC_BASE
+   and ITCH_URL from the environment and, until all are set, stops before
+   deploying with a message naming the missing ones (exit 3).
 5. the schedule: a daily Routine running `./daily.sh`

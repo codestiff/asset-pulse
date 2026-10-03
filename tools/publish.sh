@@ -1,48 +1,47 @@
 #!/bin/bash
 # PUBLISH ONE RUN (the plan's step 3): the private pulse behind Access, the
-# public catalog on the explorer's Pages hostname, the catalog's objects to the
-# `catalog` R2 bucket by hash.
+# public catalog on the explorer's existing Pages hostname, the catalog's
+# objects to the `catalog` R2 bucket by hash.
 #
 #   tools/publish.sh out/<date>
 #
-# Needs, from the environment's secrets (never a file in this repository):
-#   CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID   Pages, R2, Access scope
-#   EDGE_ZONE             the owner's domain: the intake's URL and both hostnames
+# Reads, from the environment (never a file in this repository):
+#   CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID   Pages, R2 and Access scope
+#   EDGE_ZONE             the owner's domain: the intake's public URL and pulse.<zone>
 #   CATALOG_PUBLIC_BASE   the catalog bucket's public URL, ending in /
-# The pulse's hostname is pulse.<zone> (ops/edge/README.md, behind Access); the
-# catalog's is read from the explorer's Pages config (explorer/wrangler.toml).
+#   ITCH_URL              the pay-what-you-want page for the finer builds
+# Until every one is set it stops before deploying anything, names what is
+# missing and exits 3: those values are the owner's to give (2026-10-03), and
+# this step never works around them. The catalog's hostname is the one the
+# explorer's Pages config names (explorer/wrangler.toml, `# hostname:`).
 #
-# Exit 3, publishing nothing, when the token is absent: the Cloudflare account
-# is the owner's hand action 1, and this step stops rather than works around it.
-# It also refuses, before anything is uploaded, when no Access application
-# covers the pulse's hostname (the pulse is private or it is not published: the
-# plan's step 3 ablation), or when the catalog's request form points at a local
-# URL. An empty itch_url in catalog.json is a warning: the subject pages say the
-# paid builds' page is not up yet.
+# With them, it refuses before uploading when no Access application covers
+# pulse.<zone> (the pulse is private or it is not published: the plan's step 3
+# ablation) or when the catalog's request form still points at a local URL.
 set -uo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 RUN="${1:?usage: tools/publish.sh out/<date>}"
 RUN="$(cd "$RUN" && pwd)"
 say() { echo "publish: $*"; }
-if [ -z "${CLOUDFLARE_API_TOKEN:-}" ] || [ -z "${CLOUDFLARE_ACCOUNT_ID:-}" ]; then
-  say "no Cloudflare token in this environment (CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID) -- nothing published; both sites are in $RUN"
+missing=()
+for v in CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID EDGE_ZONE CATALOG_PUBLIC_BASE ITCH_URL; do
+  [ -n "${!v:-}" ] || missing+=("$v")
+done
+if [ "${#missing[@]}" -gt 0 ]; then
+  say "stopped before deploying: the environment has no ${missing[*]} -- nothing published; both sites are built in $RUN (site/, catalog/)"
   exit 3
 fi
-for v in EDGE_ZONE CATALOG_PUBLIC_BASE; do
-  [ -n "${!v:-}" ] || { say "REFUSED: $v is not set"; exit 1; }
-done
 CFG="$ROOT/catalog.json"
-BUCKET="$(python3 -c "import json,sys;print(json.load(open(sys.argv[1]))['bucket'])" "$CFG")"
-PULSE_PROJECT="$(python3 -c "import json,sys;print(json.load(open(sys.argv[1]))['pages']['pulse'])" "$CFG")"
-CATALOG_PROJECT="$(python3 -c "import json,sys;print(json.load(open(sys.argv[1]))['pages']['catalog'])" "$CFG")"
+val() { python3 -c "import json,sys;d=json.load(open(sys.argv[1]))
+for k in sys.argv[2].split('.'): d=d[k]
+print(d)" "$CFG" "$1"; }
+BUCKET="$(val bucket)"; PULSE_PROJECT="$(val pages.pulse)"; CATALOG_PROJECT="$(val pages.catalog)"
 WRANGLER="${WRANGLER:-npx --yes wrangler@3}"
-PULSE_HOSTNAME="pulse.$EDGE_ZONE"
-CATALOG_HOSTNAME="$(sed -n 's/^# hostname: //p' "$ROOT/explorer/wrangler.toml" 2>/dev/null | sed "s/<zone>/$EDGE_ZONE/")"
-[ -n "$CATALOG_HOSTNAME" ] || { say "REFUSED: no '# hostname:' in explorer/wrangler.toml (run tools/bake.sh to check out the explorer pin)"; exit 1; }
-[ -n "$(python3 -c "import json,sys;print(json.load(open(sys.argv[1])).get('itch_url',''))" "$CFG")" ] \
-  || say "warning: itch_url is empty in catalog.json; the pages say the pay-what-you-want page is not up yet"
 API="https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID"
 auth=(-H "Authorization: Bearer $CLOUDFLARE_API_TOKEN")
+PULSE_HOSTNAME="pulse.$EDGE_ZONE"
+CATALOG_HOSTNAME="$(sed -n 's/^# hostname: //p' "$ROOT/explorer/wrangler.toml" 2>/dev/null | sed "s/<zone>/$EDGE_ZONE/")"
+[ -n "$CATALOG_HOSTNAME" ] || { say "REFUSED: no '# hostname:' in explorer/wrangler.toml (tools/bake.sh checks out the explorer pin)"; exit 1; }
 
 # 1. THE PULSE IS PRIVATE OR IT IS NOT PUBLISHED.
 apps="$(curl -fsS "${auth[@]}" "$API/access/apps?per_page=100")" || { say "REFUSED: cannot read the Access applications"; exit 1; }
@@ -53,8 +52,8 @@ doms = [d for a in apps for d in ([a.get("domain", "")] + [s.get("uri", "") for 
 sys.exit(0 if any(d.split("/")[0] in (host, "*." + host.split(".", 1)[-1]) for d in doms) else 1)
 PY
 
-# 2. THE CATALOG, rebuilt to point at the bucket and the public intake.
-CATALOG_ASSET_BASE="$CATALOG_PUBLIC_BASE" python3 "$ROOT/tools/catalog.py" "$RUN" || { say "REFUSED: the catalog did not build"; exit 1; }
+# 2. THE CATALOG, rebuilt against the bucket, the public intake and the itch page.
+python3 "$ROOT/tools/catalog.py" "$RUN" || { say "REFUSED: the catalog did not build"; exit 1; }
 python3 - "$RUN/catalog/objects.json" <<'PY' || { say "REFUSED: the catalog's request form points at a local URL"; exit 1; }
 import json, sys
 u = json.load(open(sys.argv[1]))["edge"].get("intake", "")
@@ -74,9 +73,12 @@ STAGE="$(mktemp -d)"; trap 'rm -rf "$STAGE"' EXIT
 ( cd "$RUN/catalog" && tar --exclude=./objects --exclude=./objects.json -cf - . ) | ( cd "$STAGE" && tar -xf - )
 $WRANGLER pages deploy "$STAGE" --project-name "$CATALOG_PROJECT" --branch main --commit-dirty=true || { say "the catalog deploy failed"; exit 1; }
 $WRANGLER pages deploy "$RUN/site" --project-name "$PULSE_PROJECT" --branch main --commit-dirty=true || { say "the pulse deploy failed"; exit 1; }
-# The hostnames on their projects (idempotent: an existing domain answers 409).
-for pair in "$CATALOG_PROJECT=$CATALOG_HOSTNAME" "$PULSE_PROJECT=$PULSE_HOSTNAME"; do
+# The pulse's hostname on its project; the catalog's is the project's own
+# pages.dev name and needs none (a custom one, if the config ever names it, is
+# attached the same way). An existing domain answers 409.
+for pair in "$PULSE_PROJECT=$PULSE_HOSTNAME" "$CATALOG_PROJECT=$CATALOG_HOSTNAME"; do
   proj="${pair%%=*}"; host="${pair#*=}"
+  case "$host" in *.pages.dev) continue ;; esac
   code="$(curl -s -o /dev/null -w '%{http_code}' "${auth[@]}" -H 'Content-Type: application/json' \
     -X POST "$API/pages/projects/$proj/domains" --data "{\"name\":\"$host\"}")"
   case "$code" in 200|409) say "$host -> $proj" ;; *) say "could not point $host at $proj (HTTP $code)"; exit 1 ;; esac

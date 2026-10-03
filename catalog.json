@@ -1,8 +1,6 @@
 {
-  "about": "The public catalog's settings. Nothing here scores or renders. The licence is the owner's decision 5 (the-release-infrastructure-this-week) as recommended: attribution. The intake URL is read from agent A's table in the library's ops/edge/README.md with EDGE_ZONE filled in. itch_url is the pay-what-you-want page for the finer builds: empty until the owner's itch page exists, and the subject pages say so rather than link nowhere.",
+  "about": "The public catalog's settings: names only. Nothing here scores, renders or licenses: the download's licence is the library's runtime licence (ops/runtime/runtime.toml), each plate's is its `licence` in plates/manifest.json, the numbers are the scorecard's. Deploy values come from the environment: CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID, EDGE_ZONE, CATALOG_PUBLIC_BASE, ITCH_URL (tools/publish.sh).",
   "title": "the asset library",
-  "licence": "Creative Commons Attribution 4.0 International (CC BY 4.0)",
-  "licence_url": "https://creativecommons.org/licenses/by/4.0/",
   "credit": "codestiff/asset-generators",
   "model_viewer": "https://cdn.jsdelivr.net/npm/@google/model-viewer@4.0.0/dist/model-viewer.min.js",
   "pages": {
@@ -10,6 +8,5 @@
     "catalog": "asset-explorer"
   },
   "bucket": "catalog",
-  "itch_url": "",
   "explorer_config": "explorer/wrangler.toml"
 }
