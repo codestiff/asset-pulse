@@ -213,3 +213,4 @@ above then shows the catalog.
 ## Licence
 
 The catalog and the plates are CC BY 4.0, the code MIT: see LICENSE.md.
+- 2026-10-03 23:57 UTC, workflow run #4 green (70 min, library bdc29a71, 90 subjects, 70 downloads): the cloud Routine "asset-pulse daily run" is disabled; the workflow is the daily run from here.
