@@ -1,17 +1,15 @@
 {
-  "about": "The public catalog's settings. Nothing here scores or renders; the licence is the owner's decision 5 (the-release-infrastructure-this-week) as recommended: attribution. The URLs are read from the library's ops/edge/README.md when agent A has written it; until then these stubs are used, and tools/publish.sh refuses to publish a page that still points at a stub.",
+  "about": "The public catalog's settings. Nothing here scores or renders. The licence is the owner's decision 5 (the-release-infrastructure-this-week) as recommended: attribution. The intake URL is read from agent A's table in the library's ops/edge/README.md with EDGE_ZONE filled in. itch_url is the pay-what-you-want page for the finer builds: empty until the owner's itch page exists, and the subject pages say so rather than link nowhere.",
   "title": "the asset library",
   "licence": "Creative Commons Attribution 4.0 International (CC BY 4.0)",
   "licence_url": "https://creativecommons.org/licenses/by/4.0/",
   "credit": "codestiff/asset-generators",
   "model_viewer": "https://cdn.jsdelivr.net/npm/@google/model-viewer@4.0.0/dist/model-viewer.min.js",
-  "stub": {
-    "intake": "http://127.0.0.1:8787/requests",
-    "downloads": "http://127.0.0.1:8787/downloads"
-  },
   "pages": {
     "pulse": "asset-pulse",
     "catalog": "asset-explorer"
   },
-  "bucket": "catalog"
+  "bucket": "catalog",
+  "itch_url": "",
+  "explorer_config": "explorer/wrangler.toml"
 }

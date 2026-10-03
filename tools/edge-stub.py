@@ -1,30 +1,34 @@
 #!/usr/bin/env python3
-"""A LOCAL STUB of agent A's edge (the-release-infrastructure-this-week: "until
-agent A lands, B and D build against a local stub that returns 200").
+"""A LOCAL STUB of agent A's intake, for testing the catalog's request form
+without Turnstile, moderation or a store.
 
-    tools/edge-stub.py [port]        # default 8787, the stub URLs in catalog.json
+    tools/edge-stub.py [port]        # default 8787, the intake's local port in
+                                     # the library's ops/edge/README.md
 
-POST /requests   200 and a request id; logs what a real intake would refuse on
-                 (no photo, no licence tick) but stores nothing.
-GET  /downloads  200 and a line naming the subject a signed link would be for.
+POST /v1/requests  201 {"id"}, as the real intake answers; it logs whether a
+                   photo and a licence (CC-BY-4.0 or CC0-1.0) came with it and
+                   stores nothing. A request with neither is refused 400 with a
+                   reason, as the real intake would refuse it.
 Every answer carries CORS headers, so the catalog served from another port can
-post to it. It is a stub: nothing is moderated, signed or kept.
+post to it. Agent A's own Workers run under `wrangler dev` (its README); this
+stub exists so the pulse's test needs no npm install and no secret.
 """
 import json
+import re
 import sys
 import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import urlparse
 
 
 class Stub(BaseHTTPRequestHandler):
-    def _send(self, code, body, kind="application/json"):
+    def _send(self, code, body):
         data = body.encode()
         self.send_response(code)
-        self.send_header("Content-Type", kind)
+        self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(data)))
         self.send_header("Access-Control-Allow-Origin", "*")
-        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+        self.send_header("Access-Control-Allow-Methods", "POST, OPTIONS")
         self.send_header("Access-Control-Allow-Headers", "*")
         self.end_headers()
         self.wfile.write(data)
@@ -33,24 +37,19 @@ class Stub(BaseHTTPRequestHandler):
         self._send(204, "")
 
     def do_POST(self):
-        if urlparse(self.path).path != "/requests":
+        if urlparse(self.path).path != "/v1/requests":
             return self._send(404, json.dumps({"error": "no such route"}))
-        size = int(self.headers.get("Content-Length") or 0)
-        body = self.rfile.read(size)
-        has_photo = b'name="photo"; filename=' in body
-        has_licence = b'name="licence"' in body
+        body = self.rfile.read(int(self.headers.get("Content-Length") or 0))
+        photo = b'name="photo"; filename=' in body
+        m = re.search(rb'name="licence"\r\n\r\n([^\r]*)', body)
+        licence = m.group(1).decode() if m else ""
+        if not photo or licence not in ("CC-BY-4.0", "CC0-1.0"):
+            reason = "no photo" if not photo else "the licence must be CC-BY-4.0 or CC0-1.0"
+            print("stub intake: refused (%s)" % reason, flush=True)
+            return self._send(400, json.dumps({"refused": True, "link": "form", "reason": reason}))
         rid = uuid.uuid4().hex[:12]
-        print("stub intake: %d bytes, photo=%s, licence=%s -> request %s" % (size, has_photo, has_licence, rid),
-              flush=True)
-        self._send(200, json.dumps({"request": rid, "stub": True}))
-
-    def do_GET(self):
-        u = urlparse(self.path)
-        if u.path != "/downloads":
-            return self._send(404, json.dumps({"error": "no such route"}))
-        subject = parse_qs(u.query).get("subject", ["?"])[0]
-        self._send(200, "stub: a signed link for the finer builds of %s would be issued here\n" % subject,
-                   "text/plain")
+        print("stub intake: %d bytes, photo, licence %s -> %s" % (len(body), licence, rid), flush=True)
+        self._send(201, json.dumps({"id": rid, "stub": True}))
 
     def log_message(self, *a):
         pass
@@ -58,5 +57,5 @@ class Stub(BaseHTTPRequestHandler):
 
 if __name__ == "__main__":
     port = int(sys.argv[1]) if len(sys.argv) > 1 else 8787
-    print("edge stub on http://127.0.0.1:%d" % port, flush=True)
+    print("intake stub on http://127.0.0.1:%d/v1/requests" % port, flush=True)
     ThreadingHTTPServer(("127.0.0.1", port), Stub).serve_forever()

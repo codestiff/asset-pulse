@@ -62,6 +62,7 @@ model-viewer { width: 100%; height: 360px; background: rgba(127,127,127,.08); }
   text-decoration: none; margin: 4px 8px 4px 0; }
 form { display: grid; gap: 8px; max-width: 480px; }
 input, textarea { font: inherit; padding: 6px; max-width: 100%; }
+fieldset { border: 1px solid var(--line); border-radius: 6px; }
 .shots { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 8px; }
 """
 
@@ -90,23 +91,20 @@ class Objects:
 
 
 def edge_urls(cfg):
-    """The intake and downloads URLs agent A writes into the library's
-    ops/edge/README.md; the stubs in catalog.json until it exists."""
+    """The intake URL from agent A's table in the library's ops/edge/README.md:
+    its public URL with EDGE_ZONE filled in when the zone is set, its local
+    `wrangler dev` URL until then (and publish refuses a page on a local URL)."""
     readme = ROOT / "library" / "ops" / "edge" / "README.md"
-    urls = dict(cfg["stub"])
-    found = {}
+    zone = os.environ.get("EDGE_ZONE", "")
+    urls = {"intake": "", "from": "no ops/edge/README.md in the library at this pin: no request form"}
     if readme.exists():
         for line in readme.read_text().splitlines():
-            m = re.search(r"https://[^\s)`'\"<>]+", line)
-            if not m:
-                continue
-            low = line.lower()
-            if "intake" in low or "requests" in low:
-                found.setdefault("intake", m.group(0))
-            elif "download" in low:
-                found.setdefault("downloads", m.group(0))
-    urls.update(found)
-    urls["from"] = "ops/edge/README.md" if found else "catalog.json stubs (ops/edge/README.md not in the library yet)"
+            cells = [c.strip().strip("`") for c in line.strip().strip("|").split("|")]
+            if len(cells) >= 3 and cells[0].lower().startswith("intake"):
+                public, local = cells[1], cells[2]
+                urls["intake"] = public.replace("<zone>", zone) if zone else local
+                urls["from"] = "ops/edge/README.md (%s)" % ("zone " + zone if zone else "local, EDGE_ZONE unset")
+                break
     return urls
 
 
@@ -159,6 +157,25 @@ def deterministic_zip(members):
             info.compress_type = zipfile.ZIP_DEFLATED
             z.writestr(info, data)
     return buf.getvalue()
+
+
+def facts_of(gid):
+    """What the library's committed JSON says about a subject: its ladder
+    (class, size, how many rungs, how the ladder ends) and its card (taxon, use)."""
+    group, name = gid.split("/", 1)
+    base = ROOT / "library" / "generators" / group / name.replace("-", "_")
+    lad, card = Path(str(base) + ".ladder.json"), Path(str(base) + ".card.json")
+    L = json.loads(lad.read_text()) if lad.exists() else {}
+    C = json.loads(card.read_text()) if card.exists() else {}
+    rows = [("class", L.get("class")), ("size", "%.2f m" % L["extent_m"] if L.get("extent_m") else None),
+            ("rungs", L.get("mesh_rungs")), ("ladder ends", L.get("ladder_end")),
+            ("taxon", C.get("taxon")), ("use", C.get("use")), ("rendered as", L.get("authority"))]
+    return [(k, v) for k, v in rows if v not in (None, "")]
+
+
+def sheets_of(run, gid):
+    d = run / gid.replace("/", "_")
+    return sorted(d.glob("sheet-p*.jpg")) if d.exists() else []
 
 
 def renders_of(run, gid):
@@ -222,6 +239,9 @@ def main(argv):
         if gaps:
             text += "\nKnown gaps in this download:\n" + "".join("  - %s\n" % g for g in gaps)
         members.append(("ATTRIBUTION.txt", text.encode()))
+        # The same file on its own, for the finer builds on itch to carry too.
+        (site / "attribution").mkdir(exist_ok=True)
+        (site / "attribution" / ("%s.txt" % slug)).write_text(text)
         zipped = deterministic_zip(members)
         zip_url = objs.put(zipped, ".zip", "zip")
 
@@ -230,6 +250,12 @@ def main(argv):
             tmp = site / ".shot.jpg"
             small_jpeg(png, tmp)
             shots.append(objs.put(tmp.read_bytes(), ".jpg", "render"))
+            tmp.unlink()
+        sheets = []
+        for jpg in sheets_of(run, gid):
+            tmp = site / ".sheet.jpg"
+            small_jpeg(jpg, tmp)
+            sheets.append(objs.put(tmp.read_bytes(), ".jpg", "sheet"))
             tmp.unlink()
         thumb = ("<img src='%s' alt='%s' loading=lazy>" % (html.escape(shots[0]), html.escape(key))
                  if shots else "<div class=noimg>no render this run</div>")
@@ -244,43 +270,59 @@ def main(argv):
                         "shadow-intensity=1 loading=lazy></model-viewer>" % (html.escape(rel(rung0)), html.escape(key)))
         else:
             body.append("<p class=bad>no rung 0 glTF in this bake</p>")
-        body.append("<p><a class=button href='%s' download='%s.zip'>free download (%d KB)</a>"
-                    "<a class=button href='%s?subject=%s'>finer builds (paid)</a></p>" % (
-                        html.escape(rel(zip_url)), slug, (len(zipped) + 1023) // 1024,
-                        html.escape(urls["downloads"]), html.escape(key)))
-        body.append("<p class=mute>Every rung's glTF%s and ATTRIBUTION.txt, under %s. "
-                    "The finer bands are the paid tier.</p>" % (
+        itch = cfg.get("itch_url", "")
+        paid = ("<a class=button href='%s' rel=noopener target=_blank>finer builds: pay what you want on itch</a>"
+                % html.escape(itch)) if itch else "<span class=mute>finer builds: pay what you want on itch (the page is not up yet)</span>"
+        body.append("<p><a class=button href='%s' download='%s.zip'>free download, the 1080 bake (%d KB)</a>%s</p>" % (
+            html.escape(rel(zip_url)), slug, (len(zipped) + 1023) // 1024, paid))
+        body.append("<p class=mute>Every rung's glTF of its 1080 ladder%s and ATTRIBUTION.txt, under %s. "
+                    "Builds for finer screens are pay-what-you-want on itch, and carry the same attribution file.</p>" % (
                         ", the impostor atlas" if any(r.get("atlas_file") for r in rungs) else "",
                         "<a href='%s'>%s</a>" % (html.escape(cfg["licence_url"]), html.escape(cfg["licence"]))))
+        facts = facts_of(gid)
+        if facts:
+            body.append("<div class=wrap><table>%s</table></div>" % "".join(
+                "<tr><th>%s</th><td style='text-align:left'>%s</td></tr>" % (html.escape(k), html.escape(str(v)))
+                for k, v in facts))
         for g in gaps:
             body.append("<p class=warn>%s</p>" % html.escape(g))
         if shots:
             body.append("<h2>renders</h2><div class=shots>%s</div>" % "".join(
                 "<img src='%s' alt='%s' loading=lazy>" % (html.escape(rel(s)), html.escape(key)) for s in shots))
+        if sheets:
+            body.append("<h2>its bands</h2><p class=mute>The library's per-band sheet: each band drawn as shipped "
+                        "beside the rung derived from rung 0.</p>%s" % "".join(
+                "<img src='%s' alt='%s, band sheet' loading=lazy>" % (html.escape(rel(x)), html.escape(key)) for x in sheets))
         body.append("<h2>where it comes from</h2><pre>%s</pre>" % html.escape(text))
         (site / "s" / ("%s.html" % slug)).write_text(page(key, "".join(body), head=(
             "<script type=module src='%s'></script>" % html.escape(cfg["model_viewer"]))))
 
+    sitekey = os.environ.get("TURNSTILE_SITEKEY", "")
+    turnstile = ("<div class=cf-turnstile data-sitekey='%s'></div>" % html.escape(sitekey)) if sitekey else ""
     request = (
         "<h2>request a subject</h2>"
         "<p>Missing something? Send a photo and a line about it; requests are read by a person.</p>"
         "<form id=request method=post enctype='multipart/form-data' action='%s'>"
-        "<label>What is it? <input name=text required maxlength=500></label>"
-        "<label>A photo <input name=photo type=file accept='image/*' required></label>"
+        "<label>What is it? <input name=text required maxlength=2000></label>"
+        "<label>A photo (JPEG, PNG or WebP, up to 10 MB) <input name=photo type=file "
+        "accept='image/jpeg,image/png,image/webp' required></label>"
         "<label>How to reach you (optional) <input name=contact maxlength=200></label>"
-        "<label><input name=licence type=checkbox value=attribution required> I took this photo and grant it "
-        "under %s</label>"
-        "<button type=submit>Send the request</button><p id=sent class=mute></p></form>"
+        "<fieldset><legend>I took this photo and grant it under</legend>"
+        "<label><input name=licence type=radio value=CC-BY-4.0 required checked> CC BY 4.0 (credit me)</label> "
+        "<label><input name=licence type=radio value=CC0-1.0> CC0 (no credit needed)</label></fieldset>"
+        "%s<button type=submit>Send the request</button><p id=sent class=mute></p></form>"
         "<script>document.getElementById('request').addEventListener('submit',async e=>{e.preventDefault();"
         "const f=e.target,s=document.getElementById('sent');s.textContent='sending...';"
-        "try{const r=await fetch(f.action,{method:'POST',body:new FormData(f)});"
-        "s.textContent=r.ok?'Received, thank you.':'Not accepted ('+r.status+'): '+(await r.text()).slice(0,200);}"
+        "try{const r=await fetch(f.action,{method:'POST',body:new FormData(f)});const t=await r.text();"
+        "let j={};try{j=JSON.parse(t)}catch(_){}"
+        "s.textContent=r.ok?'Received, thank you.':'Not accepted: '+(j.reason||('HTTP '+r.status));}"
         "catch(x){s.textContent='Could not reach the request desk: '+x.message;}});</script>"
-        % (html.escape(urls["intake"]), html.escape(cfg["licence"])))
+        % (html.escape(urls["intake"]), turnstile)) if urls["intake"] else ""
+    head_index = "<script src='https://challenges.cloudflare.com/turnstile/v0/api.js' async defer></script>" if (sitekey and request) else ""
     index = ["<h1>%s</h1><p class=mute>%d subjects, library %s. Every one is a free download "
              "with its attribution file.</p>" % (html.escape(cfg["title"]), len(cards), html.escape(rev)),
              "<div class=grid>%s</div>" % "".join(cards), request]
-    (site / "index.html").write_text(page(cfg["title"], "".join(index)))
+    (site / "index.html").write_text(page(cfg["title"], "".join(index), head=head_index))
     (site / "objects.json").write_text(json.dumps({"library": rev, "base": base, "edge": urls,
                                                    "objects": objs.listed}, indent=1, sort_keys=True))
     for m in missing:

@@ -6,4 +6,4 @@
 # library's gitignored `build/artifacts/`. tools/bake.sh checks this commit out
 # under explorer/ (gitignored) and calls it; nothing in it is edited here.
 repo=codestiff/asset-explorer
-commit=1484f4600582ea951f265e3bd5af1124bbc0c68e
+commit=3567b1d3ff524222e5af491bf641aec5a631a637
