@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """THE CATALOG, the pulse's public half (the-release-infrastructure-this-week,
 "The explorer, re-read"): one static page per subject, from the library's
-committed JSON and this run's renders, with the 1080 bake as a free download
-and the finer builds pay-what-you-want on itch.
+committed JSON and this run's renders, with the 1080 bake as a free download --
+the whole offer until itch, the only store, exists for the finer builds.
 
     tools/catalog.py out/<date>      # writes out/<date>/catalog/
 
@@ -11,7 +11,9 @@ Environment (all optional to build; tools/publish.sh needs them to deploy):
                          `objects/`, beside the pages)
     EDGE_ZONE            the owner's domain: the request form posts to agent A's
                          public intake on it (its local URL until then)
-    ITCH_URL             the pay-what-you-want page for the finer builds
+    ITCH_URL             the pay-what-you-want page for the finer builds; empty
+                         until the store exists (stage 1), and the pages then
+                         read "free at 1080; finer builds soon"
     TURNSTILE_SITEKEY    the intake's Turnstile widget, when set
 
 What it reads, and decides nothing about (the owner's decisions, 2026-10-03):
@@ -299,15 +301,19 @@ def main(argv):
                             "{:,}".format(cost),
                             ("%.1f px (band %d)" % (err[1], err[0])) if err and err[1] is not None else "no band affordable",
                             "" if default else "<p class=mute>for %s's default build; this is a variant of it</p>" % html.escape(gid)))
+        # THE STORE IS ITCH AND ONLY ITCH, and it does not exist until stage 1's
+        # number holds (the-release-infrastructure-this-week, revised
+        # 2026-10-03): an empty ITCH_URL reads as the plan's own words.
         paid = ("<a class=button href='%s' rel=noopener target=_blank>finer builds: pay what you want on itch</a>"
-                % html.escape(itch)) if itch else "<span class=mute>finer builds: pay what you want on itch (the page is not up yet)</span>"
+                % html.escape(itch)) if itch else "<span class=mute>free at 1080; finer builds soon</span>"
         if zip_url:
             body.append("<p><a class=button href='%s' download='%s.zip'>free download, the 1080 bake (%d KB)</a>%s</p>" % (
                 html.escape(rel(zip_url)), slug, (len(zipped) + 1023) // 1024, paid))
-            body.append("<p class=mute>Every rung's glTF of its 1080 ladder%s, ATTRIBUTION.txt and the %s LICENSE. "
-                        "Builds for finer screens are pay-what-you-want on itch and carry the same attribution.</p>" % (
+            body.append("<p class=mute>Every rung's glTF of its 1080 ladder%s, ATTRIBUTION.txt and the %s LICENSE.%s</p>" % (
                             " down to its impostor and atlas" if L.get("ladder_end") == "impostor" else "",
-                            html.escape(licence or "library's")))
+                            html.escape(licence or "library's"),
+                            " Builds for finer screens are pay-what-you-want on itch and carry the same attribution."
+                            if itch else ""))
         else:
             body.append("<p class=warn>No download yet: %s. The ladder's end is part of the asset, so it is not "
                         "offered without it.</p><p>%s</p>" % (html.escape("; ".join(gaps)), paid))

@@ -67,16 +67,19 @@ goal table and take seconds each. Each subject's renders are capped by the run
    the library's own form) and the runtime's open LICENSE. A subject whose
    ladder ends in an impostor is offered only when its bake carries the
    impostor: the ladder end is part of the asset (the owner, 2026-10-03).
-   Finer builds are pay-what-you-want on itch (`ITCH_URL`); the request form
+   Finer builds will be pay-what-you-want on itch, the only store, from stage 1
+   (`ITCH_URL`); until then the pages read "free at 1080; finer builds soon"
+   and the free 1080 download is the whole offer. The request form
    posts to agent A's intake. Objects are named by content hash for the
    `catalog` bucket. Verified locally 2026-10-03 at library 552e8ca.
 4. publishing: `tools/publish.sh` -- objects to R2, the pulse to Pages behind
    Access on `pulse.<zone>`, the catalog to the `asset-explorer` Pages project
    on its existing hostname (`asset-explorer.pages.dev`, from the explorer's
    `wrangler.toml`, the only file of the retired app this touches). It reads
-   CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID, EDGE_ZONE, CATALOG_PUBLIC_BASE
-   and ITCH_URL from the environment and, until all are set, stops before
-   deploying with a message naming the missing ones (exit 3).
+   CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID, EDGE_ZONE and
+   CATALOG_PUBLIC_BASE from the environment (ITCH_URL optional) and, until
+   they are set, stops before deploying with a message naming the missing
+   ones (exit 3).
 5. the schedule: a daily Routine running `./daily.sh`
 
 ## Calls made here (the plan lives in the library, which this repository never edits)
@@ -96,3 +99,6 @@ goal table and take seconds each. Each subject's renders are capped by the run
 - The band sheets are private (decision 2: two numbers only on public pages).
 - The baked-channel bake falls back to the library's default when it refuses
   (filed: `three-flat-baked-channels-refuse-the-whole-transfer-bake-b6c7043d`).
+- 2026-10-03, the plan's revision (itch is the only store, from stage 1):
+  ITCH_URL is optional; empty, the paid-build link reads "free at 1080;
+  finer builds soon", and publish no longer waits on it.

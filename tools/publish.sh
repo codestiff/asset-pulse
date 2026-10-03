@@ -9,8 +9,10 @@
 #   CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID   Pages, R2 and Access scope
 #   EDGE_ZONE             the owner's domain: the intake's public URL and pulse.<zone>
 #   CATALOG_PUBLIC_BASE   the catalog bucket's public URL, ending in /
-#   ITCH_URL              the pay-what-you-want page for the finer builds
-# Until every one is set it stops before deploying anything, names what is
+#   ITCH_URL              optional: the finer builds' itch page, which does not
+#                         exist until stage 1 (the pages read "free at 1080;
+#                         finer builds soon" without it)
+# Until every required one is set it stops before deploying anything, names what is
 # missing and exits 3: those values are the owner's to give (2026-10-03), and
 # this step never works around them. The catalog's hostname is the one the
 # explorer's Pages config names (explorer/wrangler.toml, `# hostname:`).
@@ -24,7 +26,7 @@ RUN="${1:?usage: tools/publish.sh out/<date>}"
 RUN="$(cd "$RUN" && pwd)"
 say() { echo "publish: $*"; }
 missing=()
-for v in CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID EDGE_ZONE CATALOG_PUBLIC_BASE ITCH_URL; do
+for v in CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID EDGE_ZONE CATALOG_PUBLIC_BASE; do
   [ -n "${!v:-}" ] || missing+=("$v")
 done
 if [ "${#missing[@]}" -gt 0 ]; then
