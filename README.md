@@ -92,6 +92,79 @@ goal table and take seconds each. Each subject's renders are capped by the run
    at `https://codestiff.github.io/asset-pulse/` once it can run; until then a
    daily Routine runs `./daily.sh` in a cloud session.
 
+## The coffee and the priority rule (the-library-as-a-commons step 5)
+
+The catalog's index, and nowhere else, carries a coffee link to GitHub
+Sponsors, read from one value (`sponsors_url` in `catalog.json`) and hidden
+while it is empty. Beside it, one of two lines:
+
+- while the library's `tools/commission-cost.py` prints "falsifier holds" (a
+  coffee pays for a commission): "A sponsor's request is authored first:
+  requests from sponsors go to the front of the queue. What is made from them
+  is still free for everyone, with its attribution file."
+- until then (on 2026-10-03 it printed "$187.75 per held commission, against
+  the plan's $100 -- falsifier FIRES"): "A coffee is a thank-you and buys
+  nothing: every subject here stays free, and requests are authored in the
+  order the library can afford them."
+
+The rule switches by itself on the run after the library's measure changes;
+nothing here has to be edited.
+
+## The pulse plan, closed (fable-plans/active/the-pulse-is-a-consumer)
+
+Landed as built, by the owner's decision of 2026-10-03: the public half is a
+catalog on GitHub Pages, deployed by a GitHub Actions workflow
+(`.github/workflows/pulse.yml`), not R2 behind Access. Its findings:
+
+- **Step 0, the pin and the scorecard:** landed 2026-10-01; the library's own
+  `tools/scorecard.py` replaced the prototype on 2026-10-03 and the row reads
+  both.
+- **Step 1, the renders:** verified on a fresh checkout 2026-10-03 (the
+  session hook, the import before the first sheet, 54 subjects, 40 min). The
+  failures are the library's, filed in its feedback/: subjects with no ladder,
+  close-ups that find no surface at their default height.
+- **Step 2, the private page:** one page per subject (scorecard line, band
+  sheet, history) and an index with the totals and their trend. Built every
+  run; not deployed anywhere (it carries the cost rows and the sheets).
+- **Step 3, publishing:** the catalog, public on GitHub Pages: one page per
+  subject at `/subject/<id>/`, two numbers from the scorecard, the 1080 bake
+  free (CC BY 4.0, ATTRIBUTION.txt and the licence texts in every zip), no
+  plate's bytes ever. 14 of 69 entries wait on the library's bake carrying the
+  impostor end (filed). The Cloudflare path (`tools/publish.sh`) stays for
+  later and stops without its values.
+- **Step 4, the schedule:** the workflow runs daily at 05:37 UTC; a cloud
+  Routine runs `./daily.sh` until the workflow's first green run.
+- **Step 5, the per-band sheet:** in use since 2026-10-02 (the library's
+  `tools/rung-sheet.py`).
+- **The address:** `https://codestiff.github.io/asset-pulse/` once the two
+  steps below are done.
+
+### The owner's two steps, on a phone
+
+1. **Give the workflow a key to the library.**
+   - On github.com, tap your picture, then **Settings**, then **Developer
+     settings** (at the bottom), then **Personal access tokens**, then
+     **Fine-grained tokens**, then **Generate new token**.
+   - Name it `asset-pulse library`. Under **Repository access** pick **Only
+     select repositories** and choose **asset-generators** and
+     **asset-explorer**.
+   - Under **Permissions**, **Repository permissions**, set **Contents** to
+     **Read-only**. Nothing else.
+   - Tap **Generate token** and copy it.
+   - Open the **asset-pulse** repository, then **Settings**, **Secrets and
+     variables**, **Actions**, **New repository secret**. Name: `LIBRARY_TOKEN`.
+     Paste the token. **Add secret**.
+2. **Turn on the public page.**
+   - In the **asset-pulse** repository: **Settings**, then **Pages**.
+   - Under **Build and deployment**, set **Source** to **GitHub Actions**.
+   - (The repository is private: GitHub serves Pages from a private
+     repository only on a paid plan. If the Source menu is missing, that is
+     why.)
+
+Then, in the repository's **Actions** tab, open **pulse** and tap **Run
+workflow**, or wait for 05:37 UTC. The run takes about an hour; the address
+above then shows the catalog.
+
 ## Calls made here (the plan lives in the library, which this repository never edits)
 
 - 2026-10-03, the owner's five decisions (relayed by Fable) applied in f63acca.
@@ -132,3 +205,7 @@ goal table and take seconds each. Each subject's renders are capped by the run
 - 2026-10-03, the subject URL pattern `/subject/<id>/` (variants
   `/subject/<id>/<variant>/`) is recorded here for the game's inspect, not in
   the library's pulse plan, which this repository never edits.
+- 2026-10-03, the commons' step 5: built, with the priority line gated on the
+  library's own measure (`tools/commission-cost.py`), because the plan says
+  step 5 waits while that measure fires and the dispatch asked for it now.
+  The link is empty, so nothing shows yet.

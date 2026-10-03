@@ -124,6 +124,27 @@ def edge_urls():
 DEV_MODE_LINE = ("In the game, tap the build number on the start card seven times to turn on "
                  "developer mode: inspect any subject and download it from there.")
 
+# THE COFFEE AND THE PRIORITY RULE (the-library-as-a-commons step 5), on the
+# catalog's index and nowhere else. The link is one config value, hidden while
+# empty. The rule sells priority, so it is shown only while the library's own
+# measure says a coffee pays for a commission (`tools/commission-cost.py`
+# prints "falsifier holds"); until then a set link is a thank-you that buys
+# nothing, as the plan has it.
+PRIORITY_LINE = ("A sponsor's request is authored first: requests from sponsors go to the front of the "
+                 "queue. What is made from them is still free for everyone, with its attribution file.")
+THANKS_LINE = ("A coffee is a thank-you and buys nothing: every subject here stays free, and requests "
+               "are authored in the order the library can afford them.")
+
+
+def coffee_gate():
+    """True when the library's commission cost lets a coffee buy priority."""
+    tool = LIB / "tools" / "commission-cost.py"
+    if not tool.exists():
+        return False
+    r = subprocess.run([sys.executable, str(tool)], cwd=LIB, capture_output=True, text=True)
+    return "falsifier holds" in r.stdout
+
+
 LICENCE_TEXTS = ("LICENSE-PLATES.md", "LICENSE-RUNTIME.md", "PLATES-CC-BY-4.0.txt")
 SPDX_NAMES = {"CC-BY-4.0": "Creative Commons Attribution 4.0 International (CC BY 4.0)", "MIT": "MIT"}
 
@@ -404,6 +425,11 @@ def main(argv):
     index = ["<h1>%s</h1><p class=mute>%d subjects, library %s; %d free to download with their attribution "
              "file.</p>" % (html.escape(cfg["title"]), len(cards), html.escape(rev), offered),
              "<div class=grid>%s</div>" % "".join(cards), "<p>%s</p>" % html.escape(DEV_MODE_LINE), request]
+    sponsors = cfg.get("sponsors_url", "")
+    if sponsors:
+        index.append("<h2>buy the library a coffee</h2><p><a class=button href='%s' rel=noopener target=_blank>"
+                     "sponsor on GitHub</a></p><p>%s</p>" % (html.escape(sponsors),
+                                                           html.escape(PRIORITY_LINE if coffee_gate() else THANKS_LINE)))
     (site / "index.html").write_text(page(cfg["title"], "".join(index), head=head_index))
     (site / "objects.json").write_text(json.dumps({"library": rev, "base": objs.base, "edge": urls, "itch": itch,
                                                    "objects": objs.listed}, indent=1, sort_keys=True))
