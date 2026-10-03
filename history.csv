@@ -1,4 +1,4 @@
 date,pin,status,subjects,bands,covered_hand,covered_library,uncovered,fully_covered,fully_from_rung0,sources_over_ceiling
 2026-10-01,a4a3c26c6841c24c1a211196b082f9b9bfc44826,ok,44,101,88,6,7,40,16,0
 2026-10-02,93fed3894604c1758764d7c20288d17a52336843,ok,44,101,91,7,3,42,21,0
-2026-10-03,56d693e480c0f0bf0acba3cce17fb381c3a169cd,ok,64,127,31,54,42,30,28,0
+2026-10-03,bdc29a717d7228e6acb829038cbf9c411a0ccfe3,ok,72,141,31,54,56,30,28,0
