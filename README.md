@@ -78,3 +78,21 @@ goal table and take seconds each. Each subject's renders are capped by the run
    and ITCH_URL from the environment and, until all are set, stops before
    deploying with a message naming the missing ones (exit 3).
 5. the schedule: a daily Routine running `./daily.sh`
+
+## Calls made here (the plan lives in the library, which this repository never edits)
+
+- 2026-10-03, the owner's five decisions (relayed by Fable) applied in f63acca.
+- A subject whose committed ladder ends in an impostor has no download until
+  the bake carries the impostor rung and its atlas, rather than a download
+  without its end (decision 1). Filed: `the-bake-stops-at-the-last-mesh-rung-4bdef5cf`.
+- "Error at the finest affordable band" is the scorecard's `error_px` on the
+  lowest-numbered band it marks `covered`; "cost at the 1080 baseline" is its
+  `src_cost`. A variant shows its generator's default numbers and says so.
+- Plate licences are printed as the manifest's `licence` field holds them; all
+  123 still read "all rights reserved". Filed:
+  `every-plates-licence-still-reads-all-rights-reserved-94e1e0e6`.
+- The download's own licence is the runtime's (`ops/runtime/runtime.toml`,
+  MIT), shipped as LICENSE beside ATTRIBUTION.txt.
+- The band sheets are private (decision 2: two numbers only on public pages).
+- The baked-channel bake falls back to the library's default when it refuses
+  (filed: `three-flat-baked-channels-refuse-the-whole-transfer-bake-b6c7043d`).
