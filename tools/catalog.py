@@ -295,7 +295,7 @@ def main(argv):
         rel = lambda u, up=up: u if "://" in u else up + u
         L, C = committed(gid)
         rungs = sorted(e.get("rungs", []), key=lambda r: int(r.get("rung", 0)))
-        members, listed, rung0, gaps = [], [], None, []
+        members, listed, rung0, gaps, no_atlas = [], [], None, [], []
         for r in rungs:
             g = r.get("gltf") or r.get("file")
             if not g or not (bake_dir / g).exists():
@@ -313,11 +313,17 @@ def main(argv):
                     members.append(("%s/%s" % (slug, Path(atlas).name), (bake_dir / atlas).read_bytes()))
                     listed.append("%s/%s  (the impostor's atlas)" % (slug, Path(atlas).name))
                 else:
-                    gaps.append("rung %s is the impostor and this bake has no atlas for it" % r.get("rung"))
-        # THE LADDER END IS PART OF THE ASSET (the owner, 2026-10-03).
+                    no_atlas.append(int(r.get("rung", 0)))
+        # THE LADDER END IS PART OF THE ASSET (the owner, 2026-10-03): name the
+        # rung that lacks its impostor atlas, the last rung of the committed
+        # ladder when the bake does not carry it at all.
         if L.get("ladder_end") == "impostor" and not any(
                 r.get("impostor") and r.get("atlas_file") for r in rungs):
-            gaps.append("its ladder ends in an impostor, and this bake does not carry the impostor rung with its atlas")
+            end = L.get("mesh_rungs", len(rungs))
+            if end not in no_atlas:
+                no_atlas.append(int(end))
+        for k in sorted(no_atlas):
+            gaps.append("rung %d, its impostor, lacks an impostor atlas in this bake" % k)
         if not licence_texts:
             gaps.append("the library's licence texts (docs/press/licences/) are not at this pin")
         offered = bool(members) and not gaps
@@ -349,7 +355,8 @@ def main(argv):
         thumb = ("<img src='%s' alt='%s' loading=lazy>" % (html.escape(shots[0]), html.escape(key))
                  if shots else "<div class=noimg>no render this run</div>")
         dl = ("<a href='%s' download='%s.zip'>free download</a>" % (html.escape(zip_url), slug)
-              if zip_url else "<span>no download yet</span>")
+              if zip_url else ("<span>no download yet: rung %s lacks its impostor atlas</span>"
+                               % ", ".join(str(k) for k in sorted(no_atlas)) if no_atlas else "<span>no download yet</span>"))
         cards.append("<div class=card><a href='%s'>%s</a><h3><a href='%s'>%s</a></h3>"
                      "<p class=mute>%d rung(s) &middot; %s</p></div>" % (path, thumb, path, html.escape(key), len(rungs), dl))
 
