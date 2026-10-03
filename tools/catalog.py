@@ -119,6 +119,11 @@ def edge_urls():
     return urls
 
 
+# The one place this is written (the principal session, 2026-10-03): under the
+# downloads, here and in the README.
+DEV_MODE_LINE = ("In the game, tap the build number on the start card seven times to turn on "
+                 "developer mode: inspect any subject and download it from there.")
+
 LICENCE_TEXTS = ("LICENSE-PLATES.md", "LICENSE-RUNTIME.md", "PLATES-CC-BY-4.0.txt")
 SPDX_NAMES = {"CC-BY-4.0": "Creative Commons Attribution 4.0 International (CC BY 4.0)", "MIT": "MIT"}
 
@@ -248,15 +253,25 @@ def main(argv):
     itch = os.environ.get("ITCH_URL", "")
     site = run / "catalog"
     shutil.rmtree(site, ignore_errors=True)   # a rebuild publishes only what this build wrote
-    (site / "s").mkdir(parents=True, exist_ok=True)
+    (site / "subject").mkdir(parents=True, exist_ok=True)
     (site / "attribution").mkdir(exist_ok=True)
     objs = Objects(site / "objects", os.environ.get("CATALOG_PUBLIC_BASE", "objects/"))
-    rel = lambda u: u if "://" in u else "../" + u   # subject pages live one level down
+
+    def subject_path(key, gid):
+        """THE STABLE URL, /subject/<id>/ (the game's inspect links to it): the
+        generator's own id for its default build, and /subject/<id>/<variant>/
+        for a variant the library bakes beside it."""
+        default = gid.replace("/", "-")
+        variant = key[len(default) + 1:] if key.startswith(default + "-") else ""
+        return "subject/%s/%s" % (gid, (variant + "/") if variant else "")
 
     cards, gaps_all = [], []
     for e in sorted(bake.get("entries", []), key=lambda e: e["key"]):
         key, gid = e["key"], e.get("generator", e["key"])
         slug = key.replace("/", "_")
+        path = subject_path(key, gid)
+        up = "../" * path.rstrip("/").count("/") + "../"
+        rel = lambda u, up=up: u if "://" in u else up + u
         L, C = committed(gid)
         rungs = sorted(e.get("rungs", []), key=lambda r: int(r.get("rung", 0)))
         members, listed, rung0, gaps = [], [], None, []
@@ -314,10 +329,10 @@ def main(argv):
                  if shots else "<div class=noimg>no render this run</div>")
         dl = ("<a href='%s' download='%s.zip'>free download</a>" % (html.escape(zip_url), slug)
               if zip_url else "<span>no download yet</span>")
-        cards.append("<div class=card><a href='s/%s.html'>%s</a><h3><a href='s/%s.html'>%s</a></h3>"
-                     "<p class=mute>%d rung(s) &middot; %s</p></div>" % (slug, thumb, slug, html.escape(key), len(rungs), dl))
+        cards.append("<div class=card><a href='%s'>%s</a><h3><a href='%s'>%s</a></h3>"
+                     "<p class=mute>%d rung(s) &middot; %s</p></div>" % (path, thumb, path, html.escape(key), len(rungs), dl))
 
-        body = ["<p><a href='../index.html'>&larr; every subject</a></p><h1>%s</h1>" % html.escape(key)]
+        body = ["<p><a href='%sindex.html'>&larr; every subject</a></p><h1>%s</h1>" % (up, html.escape(key))]
         if rung0:
             body.append("<model-viewer src='%s' alt='%s, its 1080 rung 0' camera-controls auto-rotate "
                         "shadow-intensity=1 loading=lazy></model-viewer>" % (html.escape(rel(rung0)), html.escape(key)))
@@ -356,7 +371,8 @@ def main(argv):
             body.append("<h2>renders</h2><div class=shots>%s</div>" % "".join(
                 "<img src='%s' alt='%s' loading=lazy>" % (html.escape(rel(s)), html.escape(key)) for s in shots))
         body.append("<h2>credits</h2><pre>%s</pre>" % html.escape(text))
-        (site / "s" / ("%s.html" % slug)).write_text(page(key, "".join(body), head=(
+        (site / path).mkdir(parents=True, exist_ok=True)
+        (site / path / "index.html").write_text(page(key, "".join(body), head=(
             "<script type=module src='%s'></script>" % html.escape(cfg["model_viewer"]))))
 
     sitekey = os.environ.get("TURNSTILE_SITEKEY", "")
@@ -387,7 +403,7 @@ def main(argv):
     offered = sum(1 for c in cards if "free download" in c)
     index = ["<h1>%s</h1><p class=mute>%d subjects, library %s; %d free to download with their attribution "
              "file.</p>" % (html.escape(cfg["title"]), len(cards), html.escape(rev), offered),
-             "<div class=grid>%s</div>" % "".join(cards), request]
+             "<div class=grid>%s</div>" % "".join(cards), "<p>%s</p>" % html.escape(DEV_MODE_LINE), request]
     (site / "index.html").write_text(page(cfg["title"], "".join(index), head=head_index))
     (site / "objects.json").write_text(json.dumps({"library": rev, "base": objs.base, "edge": urls, "itch": itch,
                                                    "objects": objs.listed}, indent=1, sort_keys=True))

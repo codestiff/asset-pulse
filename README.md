@@ -70,7 +70,14 @@ goal table and take seconds each. Each subject's renders are capped by the run
    Finer builds will be pay-what-you-want on itch, the only store, from stage 1
    (`ITCH_URL`); until then the pages read "free at 1080; finer builds soon"
    and the free 1080 download is the whole offer. The request form
-   posts to agent A's intake. Objects are named by content hash for the
+   posts to agent A's intake. Every subject page has a stable URL,
+   `/subject/<id>/` (the generator's id, e.g. `/subject/plant/rowan/`; a variant
+   the library bakes beside it at `/subject/<id>/<variant>/`), for the game's
+   inspect to link to. Under the downloads, here and on the index page only:
+
+   > In the game, tap the build number on the start card seven times to turn on developer mode: inspect any subject and download it from there.
+
+   Objects are named by content hash for the
    `catalog` bucket. Verified locally 2026-10-03 at library 552e8ca.
 4. publishing: `tools/publish.sh` -- objects to R2, the pulse to Pages behind
    Access on `pulse.<zone>`, the catalog to the `asset-explorer` Pages project
@@ -122,3 +129,6 @@ goal table and take seconds each. Each subject's renders are capped by the run
   without a row; then the Routine is disabled.
 - The Pages URL is recorded here, not in the library's pulse plan: this
   repository never edits the library.
+- 2026-10-03, the subject URL pattern `/subject/<id>/` (variants
+  `/subject/<id>/<variant>/`) is recorded here for the game's inspect, not in
+  the library's pulse plan, which this repository never edits.
