@@ -55,9 +55,14 @@ SCORECARD="library/tools/scorecard.py"
 TOTALS="$( cd library && python3 "../$SCORECARD" --json )" || fail_row "scorecard-json"
 ROW="$(python3 - "$DATE" "$PIN" "$TOTALS" <<'PY'
 import json, sys
-d, pin, t = sys.argv[1], sys.argv[2], json.loads(sys.argv[3])
-print(",".join(str(x) for x in [d, pin, "ok", t["subjects"], t["bands"], t["covered_hand"],
-      t["covered_derived"], t["uncovered"], t["fully"], t["fully_rung0_only"], t["src_over"]]))
+d, pin, raw = sys.argv[1], sys.argv[2], json.loads(sys.argv[3])
+# tools/scorecard.py (the library's, since 2026-10-03) nests its totals beside
+# the per-subject rows; the prototype printed them flat. The names are its own.
+t = raw.get("totals", raw)
+pick = lambda *ks: next(t[k] for k in ks if k in t)
+print(",".join(str(x) for x in [d, pin, "ok", pick("subjects"), pick("bands"), pick("covered_hand"),
+      pick("covered_library", "covered_derived"), pick("uncovered"), pick("fully"),
+      pick("fully_from_rung0", "fully_rung0_only"), pick("src_over")]))
 PY
 )" || fail_row "row"
 # One row per date: a re-run on the same day replaces the day's row.
