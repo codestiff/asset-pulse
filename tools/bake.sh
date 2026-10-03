@@ -43,7 +43,16 @@ echo "bake: impostor atlases (the library's tools/impostor.sh)"
   || echo "bake: NO IMPOSTOR ATLASES this run (the library's tools/impostor.gd failed; see its log); the bake goes on and the catalog names every far rung that lacks one"
 ARGS=(--transfer); [ "${PULSE_TRANSFER:-1}" = "0" ] && ARGS=()
 echo "bake: the registry (the explorer's tools/bake-library.sh ${ARGS[*]:-})"
-LOG="${BAKE_LOG:-$ROOT/out/bake.log}" "$EXP/tools/bake-library.sh" "$LIB" "${ARGS[@]}" || die "the registry bake failed"
+if ! LOG="${BAKE_LOG:-$ROOT/out/bake.log}" "$EXP/tools/bake-library.sh" "$LIB" "${ARGS[@]}"; then
+  # The baked-channel bake writes no manifest when any one rung's channel is
+  # flat (core/baker.gd flat_channel_problem; filed in the library's feedback/).
+  # The library's default bake -- no baked channel, "the Forward+/SDFGI
+  # product" -- is still a correct product for a download, so the catalog
+  # falls back to it and says so, rather than shipping nothing.
+  [ "${#ARGS[@]}" -gt 0 ] || die "the registry bake failed"
+  echo "bake: the baked-channel bake FAILED; falling back to the library's default bake (no baked channel)"
+  LOG="${BAKE_LOG:-$ROOT/out/bake.log}.default" "$EXP/tools/bake-library.sh" "$LIB" || die "the registry bake failed"
+fi
 [ -f "$LIB/build/artifacts/manifest.json" ] || die "the bake wrote no manifest"
 "$ROOT/tools/sync-library.sh" --verify >/dev/null || die "the bake changed the library's source tree"
 echo "bake: manifest at $LIB/build/artifacts/manifest.json"

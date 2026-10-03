@@ -138,8 +138,9 @@ def attribution(entry, rev, cfg, plates, files):
         src = str(p.get("source") or "")
         hashes = HEX64.findall(src)
         what = "; ".join(plate_line(h, plates) for h in hashes) if hashes else (src or "no source recorded")
-        sourced.append("  - %s (%s%s): %s, %s" % (
-            p.get("name"), json.dumps(p.get("default")), (" " + p["unit"]) if p.get("unit") else "", prov, what))
+        label = "" if what.lower().startswith(prov) else prov + ": "
+        sourced.append("  - %s (%s%s): %s%s" % (
+            p.get("name"), json.dumps(p.get("default")), (" " + p["unit"]) if p.get("unit") else "", label, what))
     out += sourced or ["  (none: every parameter is chosen)"]
     out += ["", "%d further parameter(s) are chosen: our own values, with no outside source." % chosen,
             "", "Files in this download:"]
