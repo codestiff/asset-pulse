@@ -80,7 +80,10 @@ goal table and take seconds each. Each subject's renders are capped by the run
    CATALOG_PUBLIC_BASE from the environment (ITCH_URL optional) and, until
    they are set, stops before deploying with a message naming the missing
    ones (exit 3).
-5. the schedule: a daily Routine running `./daily.sh`
+5. the schedule: `.github/workflows/pulse.yml`, the daily run on GitHub
+   Actions (cron 05:37 UTC and by hand), deploying the catalog to GitHub Pages
+   at `https://codestiff.github.io/asset-pulse/` once it can run; until then a
+   daily Routine runs `./daily.sh` in a cloud session.
 
 ## Calls made here (the plan lives in the library, which this repository never edits)
 
@@ -102,3 +105,20 @@ goal table and take seconds each. Each subject's renders are capped by the run
 - 2026-10-03, the plan's revision (itch is the only store, from stage 1):
   ITCH_URL is optional; empty, the paid-build link reads "free at 1080;
   finer builds soon", and publish no longer waits on it.
+
+- 2026-10-03, going public (the owner: "If we don't have a license issue, sure,
+  go public"): there is none -- the baked assets are CC BY 4.0 (`assets_licence`
+  in ops/runtime/runtime.toml), each download carries ATTRIBUTION.txt and the
+  studio's LICENSE-PLATES.md, LICENSE-RUNTIME.md and PLATES-CC-BY-4.0.txt, and
+  the owner's reserved plates never ship as bytes (the catalog refuses to write
+  any file whose sha256 is a plate's).
+- The catalog goes to GitHub Pages as a workflow artifact, not as committed
+  files: CLAUDE.md keeps images and geometry out of git, and an artifact serves
+  the same site. Only history.csv and the pin are committed by the workflow.
+- The workflow needs the LIBRARY_TOKEN secret (read on the private library and
+  explorer) and Pages on with "GitHub Actions" as its source; run #1
+  (2026-10-03, by hand) stopped at the token with its message. The cloud
+  Routine stays on until the workflow's first green run, so no day goes
+  without a row; then the Routine is disabled.
+- The Pages URL is recorded here, not in the library's pulse plan: this
+  repository never edits the library.

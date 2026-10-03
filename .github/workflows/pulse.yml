@@ -59,6 +59,7 @@ jobs:
             git config --global url."https://x-access-token:${LIBRARY_TOKEN}@github.com/codestiff/$r".insteadOf "https://github.com/codestiff/$r"
           done
       - uses: actions/checkout@v4
+        id: checkout
       - name: Godot, a virtual display, Pillow, the library
         run: |
           sudo apt-get update -q && sudo apt-get install -y -q xvfb libgl1-mesa-dri >/dev/null
@@ -78,7 +79,7 @@ jobs:
           grep -h "^catalog: " "out/$DATE"/*.log 2>/dev/null | tail -3 || true
           exit $code
       - name: commit the day's row and the pin
-        if: always()
+        if: always() && steps.checkout.outcome == 'success'
         run: |
           git config user.name "asset-pulse"
           git config user.email "asset-pulse@users.noreply.github.com"
