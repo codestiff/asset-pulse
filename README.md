@@ -58,14 +58,20 @@ goal table and take seconds each. Each subject's renders are capped by the run
    with the totals and their trend -- `tools/site.py`, checked at 390 px
 3. the catalog, the pulse's public half: `tools/bake.sh` (asset-explorer's
    bake, pinned in `explorer.lock`, run as its refresh.sh ran it), then
-   `tools/catalog.py`: a card per subject, the close-ups, a `<model-viewer>`
-   of rung 0, a free zip per subject (every rung's glTF, the atlas when there
-   is one, `ATTRIBUTION.txt` from provenance), the request form to the intake,
-   the paid link to the downloads URL; objects named by content hash for the
-   `catalog` bucket. Verified locally against `tools/edge-stub.py`.
+   `tools/catalog.py`: one static page per subject from the library's committed
+   JSON (class, size, rungs, taxon, use) and the rendered band sheets and
+   close-ups, a `<model-viewer>` of rung 0, the 1080 bake free as a zip (every
+   rung's glTF, the atlas when there is one, `ATTRIBUTION.txt` from
+   provenance), finer builds pay-what-you-want on itch (`itch_url` in
+   `catalog.json`, empty until the page exists), the request form posting to
+   agent A's intake. Objects are named by content hash for the `catalog`
+   bucket. Verified locally 2026-10-03 at library 552e8ca against
+   `tools/edge-stub.py`.
 4. publishing: `tools/publish.sh` -- objects to R2, the pulse to Pages behind
-   Access (refused without an Access app on its hostname), the catalog to the
-   `asset-explorer` Pages project. Written; stops with exit 3 until the
-   environment has CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID (the owner's
-   hand action 1), and refuses while the edge URLs are still stubs.
+   Access on `pulse.<zone>` (refused without an Access app on it), the catalog
+   to the `asset-explorer` Pages project on the hostname its `wrangler.toml`
+   names (the only file of the retired explorer app this touches). Stops with
+   exit 3 and a message until the environment has CLOUDFLARE_API_TOKEN and
+   CLOUDFLARE_ACCOUNT_ID (the owner's hand action 1); needs EDGE_ZONE and
+   CATALOG_PUBLIC_BASE too, and refuses a request form on a local URL.
 5. the schedule: a daily Routine running `./daily.sh`
