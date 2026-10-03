@@ -9,4 +9,4 @@
 # committed tables, every generator's cards), so the sync is a git checkout of
 # the pinned commit under library/ (gitignored), never a copy of runtime paths.
 repo=codestiff/asset-generators
-commit=93fed3894604c1758764d7c20288d17a52336843
+commit=552e8cafa6d21a6c4edd00998f4bef6b79d5d8e4
