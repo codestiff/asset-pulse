@@ -209,3 +209,7 @@ above then shows the catalog.
   library's own measure (`tools/commission-cost.py`), because the plan says
   step 5 waits while that measure fires and the dispatch asked for it now.
   The link is empty, so nothing shows yet.
+
+## Licence
+
+The catalog and the plates are CC BY 4.0, the code MIT: see LICENSE.md.
