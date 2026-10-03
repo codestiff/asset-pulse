@@ -41,6 +41,7 @@ import html
 import importlib.util
 import json
 import os
+import shutil
 import subprocess
 import sys
 import tomllib
@@ -246,6 +247,7 @@ def main(argv):
     urls = edge_urls()
     itch = os.environ.get("ITCH_URL", "")
     site = run / "catalog"
+    shutil.rmtree(site, ignore_errors=True)   # a rebuild publishes only what this build wrote
     (site / "s").mkdir(parents=True, exist_ok=True)
     (site / "attribution").mkdir(exist_ok=True)
     objs = Objects(site / "objects", os.environ.get("CATALOG_PUBLIC_BASE", "objects/"))
