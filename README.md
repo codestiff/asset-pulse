@@ -177,8 +177,9 @@ above then shows the catalog.
 - Plate licences are printed as the manifest's `licence` field holds them; all
   123 still read "all rights reserved". Filed:
   `every-plates-licence-still-reads-all-rights-reserved-94e1e0e6`.
-- The download's own licence is the runtime's (`ops/runtime/runtime.toml`,
-  MIT), shipped as LICENSE beside ATTRIBUTION.txt.
+- The download's licence is the baked assets' (`assets_licence`, CC BY 4.0);
+  each zip carries the library's licence texts as they stand at the pin
+  (since fe6330c9: the interface MIT, the generators all rights reserved).
 - The band sheets are private (decision 2: two numbers only on public pages).
 - The baked-channel bake falls back to the library's default when it refuses
   (filed: `three-flat-baked-channels-refuse-the-whole-transfer-bake-b6c7043d`).
