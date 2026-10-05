@@ -65,8 +65,26 @@ echo "bake: impostor atlases (the library's tools/impostor.sh)"
 [ -z "$RESUME_DIR" ] || touch "$RESUME_DIR/atlases-done"
 fi
 echo "bake: the registry (the explorer's tools/bake-library.sh ${ARGS[*]:-})"
-R=(); [ -z "$RESUME_DIR" ] || R=(--resume "$RESUME_DIR/registry")
-if ! LOG="${BAKE_LOG:-$ROOT/out/bake.log}" "$EXP/tools/bake-library.sh" "$LIB" "${ARGS[@]}" "${R[@]}"; then
+# WITH RESUME, A CAP: the bake runs under `timeout`, PULSE_BAKE_CAP_S at a time
+# (default 2400 s); a run cut by the cap is resumed at once, the subject it was
+# on having used one of its two starts (bake-library --resume leaves a subject
+# out, by name, after two). One stuck subject then costs two caps, not two
+# sessions (2026-10-05: herring, campfire, clinker boat and jetty each spent a
+# whole two-hour run). It ends: every cut uses up a start.
+registry() { # dir [args]
+  local dir=$1; shift
+  if [ -z "$RESUME_DIR" ]; then
+    LOG="${BAKE_LOG:-$ROOT/out/bake.log}" "$EXP/tools/bake-library.sh" "$LIB" "$@"; return
+  fi
+  local code
+  while :; do
+    LOG="${BAKE_LOG:-$ROOT/out/bake.log}" timeout "${PULSE_BAKE_CAP_S:-2400}" "$EXP/tools/bake-library.sh" "$LIB" "$@" --resume "$RESUME_DIR/$dir"
+    code=$?
+    [ "$code" = 124 ] || return "$code"
+    echo "bake: cut at the ${PULSE_BAKE_CAP_S:-2400} s cap; resuming (the subject it was on has used a start)"
+  done
+}
+if ! registry registry "${ARGS[@]}"; then
   # The baked-channel bake writes no manifest when any one rung's channel is
   # flat (core/baker.gd flat_channel_problem; filed in the library's feedback/).
   # The library's default bake -- no baked channel, "the Forward+/SDFGI
@@ -74,8 +92,7 @@ if ! LOG="${BAKE_LOG:-$ROOT/out/bake.log}" "$EXP/tools/bake-library.sh" "$LIB" "
   # falls back to it and says so, rather than shipping nothing.
   [ "${#ARGS[@]}" -gt 0 ] || die "the registry bake failed"
   echo "bake: the baked-channel bake FAILED; falling back to the library's default bake (no baked channel)"
-  R=(); [ -z "$RESUME_DIR" ] || R=(--resume "$RESUME_DIR/default")
-  LOG="${BAKE_LOG:-$ROOT/out/bake.log}.default" "$EXP/tools/bake-library.sh" "$LIB" "${R[@]}" || die "the registry bake failed"
+  BAKE_LOG="${BAKE_LOG:-$ROOT/out/bake.log}.default" registry default || die "the registry bake failed"
 fi
 [ -f "$LIB/build/artifacts/manifest.json" ] || die "the bake wrote no manifest"
 "$ROOT/tools/sync-library.sh" --verify >/dev/null || die "the bake changed the library's source tree"
