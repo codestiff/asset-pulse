@@ -12,6 +12,11 @@
 #   PULSE_ONLY="a/b c/d"     render only these subjects (a manual look)
 #   PULSE_BAKE=0             skip the bake and the catalog (tools/bake.sh, tools/catalog.py)
 #   PULSE_TRANSFER=0         bake without the baked channel (fast, structural only)
+#   PULSE_RESUME=1           resume an interrupted run: a subject whose sheet and
+#                            close-up are already in out/<date>/ from the SAME
+#                            library pin is not rendered again (a container
+#                            restart or a time limit costs minutes, not hours);
+#                            off by default, so a daily run always renders fresh
 #
 # Rules (fable-plans/active/the-pulse-is-a-consumer, in the library):
 #   - every number comes from the library's scorecard tool, every frame from the
@@ -91,13 +96,25 @@ if [ "${PULSE_RENDER:-1}" = "1" ] && [ "${1:-}" != "--no-render" ] && [ "${2:-}"
   SHEET_ARGS=()
   [ "${PULSE_DERIVE:-}" = "none" ] && SHEET_ARGS=(--derive none)
   MANIFEST="$OUT/manifest.json"
-  echo "[" > "$MANIFEST"; first=1; n=0; failed=0; t0=$(date +%s)
+  # RESUME only renders this pin made: out/<date>/render-pin records it, and a
+  # pin moved since (a --bump the same day) renders everything again.
+  RESUME=0
+  if [ "${PULSE_RESUME:-0}" = "1" ] && [ "$(cat "$OUT/render-pin" 2>/dev/null)" = "$PIN" ]; then RESUME=1; fi
+  echo "$PIN" > "$OUT/render-pin"
+  echo "[" > "$MANIFEST"; first=1; n=0; failed=0; resumed=0; t0=$(date +%s)
   for card in library/generators/*/*.card.json; do
     id="$(python3 -c "import json,sys; print(json.load(open(sys.argv[1]))['id'])" "$card" 2>/dev/null)" || continue
     [ -n "$id" ] || continue
     if [ -n "${PULSE_ONLY:-}" ] && [[ " $PULSE_ONLY " != *" $id "* ]]; then continue; fi
     dir="$OUT/${id//\//_}"; mkdir -p "$dir"
     s=$(date +%s); status="ok"
+    if [ "$RESUME" = 1 ] && ls "$dir"/sheet*.jpg >/dev/null 2>&1 && ls "$dir"/*closeup*.png >/dev/null 2>&1; then
+      n=$((n+1)); resumed=$((resumed+1))
+      images="$(cd "$dir" && ls *.jpg *.png 2>/dev/null | python3 -c "import json,sys; print(json.dumps(sys.stdin.read().split()))")"
+      [ $first = 1 ] || echo "," >> "$MANIFEST"; first=0
+      printf '  {"id": "%s", "status": "ok", "seconds": 0, "images": %s}' "$id" "$images" >> "$MANIFEST"
+      echo "render $id: ok (resumed: already rendered at this pin)"; continue
+    fi
     ( cd library && timeout "$CAP" python3 tools/rung-sheet.py "$id" --out "$dir/sheet.jpg" "${SHEET_ARGS[@]}" ) > "$dir/sheet.log" 2>&1 || status="sheet-failed"
     if [ "$status" = "ok" ]; then
       ( cd library && SHOT_DIR="$dir" timeout "$CAP" tools/closeup.sh "$id" ) > "$dir/closeup.log" 2>&1 || status="closeup-failed"
@@ -109,7 +126,7 @@ if [ "${PULSE_RENDER:-1}" = "1" ] && [ "${1:-}" != "--no-render" ] && [ "${2:-}"
     echo "render $id: $status in ${secs}s"
   done
   echo "" >> "$MANIFEST"; echo "]" >> "$MANIFEST"
-  echo "run: rendered $n subjects, $failed failed, in $(( $(date +%s) - t0 )) s; manifest $MANIFEST"
+  echo "run: rendered $n subjects ($resumed resumed), $failed failed, in $(( $(date +%s) - t0 )) s; manifest $MANIFEST"
   # STEP 2, THE PAGE: static HTML from this run's output and the history.
   python3 tools/site.py "$OUT" || fail_row "site"
   # THE CATALOG, the pulse's public half: the explorer's bake of every rung
