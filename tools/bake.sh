@@ -5,6 +5,11 @@
 #
 #   tools/bake.sh                 impostor atlases, then the registry bake with --transfer
 #   PULSE_TRANSFER=0 tools/bake.sh   the structural bake only (fast; no baked channel)
+#   PULSE_RESUME=1 tools/bake.sh     finish a bake cut short (a session's time limit,
+#                                    a restart): the atlases are not made again and
+#                                    each subject already baked is skipped, kept in
+#                                    out/bake-resume/<library>-<explorer>-<mode>/;
+#                                    another pin or mode starts fresh
 #
 # The order is refresh.sh's and it is not arbitrary: `tools/impostor.sh` must run
 # before the bake, because the bake only names an atlas already on disk
@@ -29,7 +34,23 @@ if [ "$(git -C "$EXP" rev-parse HEAD)" != "$PIN" ]; then
   git -C "$EXP" checkout -q --detach "$PIN" || die "the explorer pin $PIN is not on its remote"
 fi
 [ -z "$(git -C "$EXP" status --porcelain)" ] || die "explorer/ has local changes; the pulse never edits it"
-rm -rf "$LIB/build/artifacts"
+ARGS=(--transfer); [ "${PULSE_TRANSFER:-1}" = "0" ] && ARGS=()
+# RESUME (the explorer's bake-library --resume): the artifacts on disk are kept
+# only while the record of what made them is, keyed by both pins and the mode.
+RESUME_DIR=""
+if [ "${PULSE_RESUME:-0}" = "1" ]; then
+  RESUME_DIR="$ROOT/out/bake-resume/$(git -C "$LIB" rev-parse --short=12 HEAD)-${PIN:0:12}-${ARGS[*]:-structural}"
+  RESUME_DIR="${RESUME_DIR// /}"
+fi
+if [ -n "$RESUME_DIR" ] && [ -d "$RESUME_DIR" ]; then
+  echo "bake: resuming from $RESUME_DIR"
+else
+  rm -rf "$LIB/build/artifacts" "$ROOT/out/bake-resume"
+  [ -z "$RESUME_DIR" ] || mkdir -p "$RESUME_DIR"
+fi
+if [ -n "$RESUME_DIR" ] && [ -f "$RESUME_DIR/atlases-done" ]; then
+  echo "bake: impostor atlases already made for this resume"
+else
 echo "bake: impostor atlases (the library's tools/impostor.sh)"
 # The library's impostor.sh hands `xvfb-run` its `ag_godot` shell function,
 # which a child process cannot see (exit 127; filed in the library's feedback/).
@@ -41,9 +62,11 @@ echo "bake: impostor atlases (the library's tools/impostor.sh)"
   && LOG="$AG_LOGS/impostor.log" && ag_godot_display "$LOG" --path . --rendering-driver opengl3 --script tools/impostor.gd \
   ; code=$?; grep -E "^  " "$AG_LOGS/impostor.log" | tail -3; exit $code ) \
   || echo "bake: NO IMPOSTOR ATLASES this run (the library's tools/impostor.gd failed; see its log); the bake goes on and the catalog names every far rung that lacks one"
-ARGS=(--transfer); [ "${PULSE_TRANSFER:-1}" = "0" ] && ARGS=()
+[ -z "$RESUME_DIR" ] || touch "$RESUME_DIR/atlases-done"
+fi
 echo "bake: the registry (the explorer's tools/bake-library.sh ${ARGS[*]:-})"
-if ! LOG="${BAKE_LOG:-$ROOT/out/bake.log}" "$EXP/tools/bake-library.sh" "$LIB" "${ARGS[@]}"; then
+R=(); [ -z "$RESUME_DIR" ] || R=(--resume "$RESUME_DIR/registry")
+if ! LOG="${BAKE_LOG:-$ROOT/out/bake.log}" "$EXP/tools/bake-library.sh" "$LIB" "${ARGS[@]}" "${R[@]}"; then
   # The baked-channel bake writes no manifest when any one rung's channel is
   # flat (core/baker.gd flat_channel_problem; filed in the library's feedback/).
   # The library's default bake -- no baked channel, "the Forward+/SDFGI
@@ -51,7 +74,8 @@ if ! LOG="${BAKE_LOG:-$ROOT/out/bake.log}" "$EXP/tools/bake-library.sh" "$LIB" "
   # falls back to it and says so, rather than shipping nothing.
   [ "${#ARGS[@]}" -gt 0 ] || die "the registry bake failed"
   echo "bake: the baked-channel bake FAILED; falling back to the library's default bake (no baked channel)"
-  LOG="${BAKE_LOG:-$ROOT/out/bake.log}.default" "$EXP/tools/bake-library.sh" "$LIB" || die "the registry bake failed"
+  R=(); [ -z "$RESUME_DIR" ] || R=(--resume "$RESUME_DIR/default")
+  LOG="${BAKE_LOG:-$ROOT/out/bake.log}.default" "$EXP/tools/bake-library.sh" "$LIB" "${R[@]}" || die "the registry bake failed"
 fi
 [ -f "$LIB/build/artifacts/manifest.json" ] || die "the bake wrote no manifest"
 "$ROOT/tools/sync-library.sh" --verify >/dev/null || die "the bake changed the library's source tree"

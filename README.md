@@ -21,7 +21,9 @@ plan it executes is the library's
     ./run.sh --no-render              the scorecard and the row only
     PULSE_BACKLOG=0 ./run.sh          skip the derivation backlog (a quick look)
     PULSE_RESUME=1 ./run.sh           resume a run cut short (a restart, a time limit): subjects
-                                      already rendered at the same pin are not rendered again
+                                      already rendered at the same pin are not rendered again, and
+                                      the bake (tools/bake.sh) skips the atlases and every subject
+                                      already baked at the same library and explorer pins
     PULSE_DERIVE=none ./run.sh        drawn today only: no derived column
     PULSE_ONLY="built/vase" ./run.sh  render one subject, for a manual look
 
