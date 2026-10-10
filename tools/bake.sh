@@ -5,6 +5,8 @@
 #
 #   tools/bake.sh                 impostor atlases, then the registry bake with --transfer
 #   PULSE_TRANSFER=0 tools/bake.sh   the structural bake only (fast; no baked channel)
+#   PULSE_BAKE_BUDGET_S=2700 (with PULSE_RESUME=1)  the whole registry bake in
+#                                    that many seconds; what finished is shipped
 #   PULSE_RESUME=1 tools/bake.sh     finish a bake cut short (a session's time limit,
 #                                    a restart): the atlases are not made again and
 #                                    each subject already baked is skipped, kept in
@@ -76,12 +78,28 @@ registry() { # dir [args]
   if [ -z "$RESUME_DIR" ]; then
     LOG="${BAKE_LOG:-$ROOT/out/bake.log}" "$EXP/tools/bake-library.sh" "$LIB" "$@"; return
   fi
-  local code
+  # A BUDGET FOR THE WHOLE BAKE (PULSE_BAKE_BUDGET_S, row 215): past it no
+  # subject is begun (bake-library --deadline), a run still going is stopped at
+  # it, and one last pass writes the manifest of what finished, the rest named
+  # not_baked -- so the catalog deploys with what is done. Unset, no budget.
+  local deadline=0 code cap
+  [ -z "${PULSE_BAKE_BUDGET_S:-}" ] || deadline=$(( $(date +%s) + PULSE_BAKE_BUDGET_S ))
+  local D=(); [ "$deadline" = 0 ] || D=(--deadline "$deadline")
   while :; do
-    LOG="${BAKE_LOG:-$ROOT/out/bake.log}" timeout "${PULSE_BAKE_CAP_S:-2400}" "$EXP/tools/bake-library.sh" "$LIB" "$@" --resume "$RESUME_DIR/$dir"
+    cap="${PULSE_BAKE_CAP_S:-2400}"
+    if [ "$deadline" != 0 ]; then
+      local left=$(( deadline - $(date +%s) ))
+      if [ "$left" -le 0 ]; then
+        echo "bake: the ${PULSE_BAKE_BUDGET_S} s budget is spent; the manifest of what finished"
+        LOG="${BAKE_LOG:-$ROOT/out/bake.log}.final" "$EXP/tools/bake-library.sh" "$LIB" "$@" --resume "$RESUME_DIR/$dir" "${D[@]}"
+        return
+      fi
+      [ "$left" -lt "$cap" ] && cap=$left
+    fi
+    LOG="${BAKE_LOG:-$ROOT/out/bake.log}" timeout "$cap" "$EXP/tools/bake-library.sh" "$LIB" "$@" --resume "$RESUME_DIR/$dir" "${D[@]}"
     code=$?
     [ "$code" = 124 ] || return "$code"
-    echo "bake: cut at the ${PULSE_BAKE_CAP_S:-2400} s cap; resuming (the subject it was on has used a start)"
+    echo "bake: cut at ${cap} s; resuming (the subject it was on has used a start)"
   done
 }
 if ! registry registry "${ARGS[@]}"; then

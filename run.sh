@@ -108,18 +108,27 @@ if [ "${PULSE_RENDER:-1}" = "1" ] && [ "${1:-}" != "--no-render" ] && [ "${2:-}"
     if [ -n "${PULSE_ONLY:-}" ] && [[ " $PULSE_ONLY " != *" $id "* ]]; then continue; fi
     dir="$OUT/${id//\//_}"; mkdir -p "$dir"
     s=$(date +%s); status="ok"
-    if [ "$RESUME" = 1 ] && ls "$dir"/sheet*.jpg >/dev/null 2>&1 && ls "$dir"/*closeup*.png >/dev/null 2>&1; then
-      n=$((n+1)); resumed=$((resumed+1))
+    # A subject done at this pin is not done again: its status file says how it
+    # ended (a failure at the same pin fails the same way; row 215), and a
+    # directory from before the status file counts as done when its images are.
+    prev=""
+    if [ "$RESUME" = 1 ]; then
+      prev="$(cat "$dir/status" 2>/dev/null)"
+      if [ -z "$prev" ] && ls "$dir"/sheet*.jpg >/dev/null 2>&1 && ls "$dir"/*closeup*.png >/dev/null 2>&1; then prev="ok"; fi
+    fi
+    if [ -n "$prev" ]; then
+      n=$((n+1)); resumed=$((resumed+1)); [ "$prev" = "ok" ] || failed=$((failed+1))
       images="$(cd "$dir" && ls *.jpg *.png 2>/dev/null | python3 -c "import json,sys; print(json.dumps(sys.stdin.read().split()))")"
       [ $first = 1 ] || echo "," >> "$MANIFEST"; first=0
-      printf '  {"id": "%s", "status": "ok", "seconds": 0, "images": %s}' "$id" "$images" >> "$MANIFEST"
-      echo "render $id: ok (resumed: already rendered at this pin)"; continue
+      printf '  {"id": "%s", "status": "%s", "seconds": 0, "images": %s}' "$id" "$prev" "$images" >> "$MANIFEST"
+      echo "render $id: $prev (resumed: already done at this pin)"; continue
     fi
     ( cd library && timeout "$CAP" python3 tools/rung-sheet.py "$id" --out "$dir/sheet.jpg" "${SHEET_ARGS[@]}" ) > "$dir/sheet.log" 2>&1 || status="sheet-failed"
     if [ "$status" = "ok" ]; then
       ( cd library && SHOT_DIR="$dir" timeout "$CAP" tools/closeup.sh "$id" ) > "$dir/closeup.log" 2>&1 || status="closeup-failed"
     fi
     secs=$(( $(date +%s) - s )); n=$((n+1)); [ "$status" = "ok" ] || failed=$((failed+1))
+    echo "$status" > "$dir/status"
     images="$(cd "$dir" && ls *.jpg *.png 2>/dev/null | python3 -c "import json,sys; print(json.dumps(sys.stdin.read().split()))")"
     [ $first = 1 ] || echo "," >> "$MANIFEST"; first=0
     printf '  {"id": "%s", "status": "%s", "seconds": %d, "images": %s}' "$id" "$status" "$secs" "$images" >> "$MANIFEST"
