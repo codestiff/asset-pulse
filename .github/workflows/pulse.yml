@@ -92,6 +92,8 @@ jobs:
             library/build/artifacts
           key: bake-${{ steps.pins.outputs.library }}-${{ steps.pins.outputs.explorer }}-${{ github.run_id }}
           restore-keys: bake-${{ steps.pins.outputs.library }}-${{ steps.pins.outputs.explorer }}-
+      - name: the catalog guard's test
+        run: python3 tools/test_catalog_guard.py
       - name: the run
         id: run
         env:
@@ -108,7 +110,12 @@ jobs:
           if [ -f out/render-cache/render-pin ]; then mkdir -p "out/$DATE" && cp -a out/render-cache/. "out/$DATE/"; fi
           ./run.sh; code=$?
           echo "date=$DATE" >> "$GITHUB_OUTPUT"
-          [ -f "out/$DATE/catalog/index.html" ] && echo "catalog=out/$DATE/catalog" >> "$GITHUB_OUTPUT"
+          # OPTION A (the owner, 2026-10-10): the public catalog is replaced only by
+          # one listing at least as many subjects; a run whose bake was cut short
+          # leaves the live page as it was (tools/catalog_guard.py, its test above).
+          if [ -f "out/$DATE/catalog/index.html" ] && python3 tools/catalog_guard.py "out/$DATE/catalog" "https://codestiff.github.io/asset-pulse/"; then
+            echo "catalog=out/$DATE/catalog" >> "$GITHUB_OUTPUT"
+          fi
           grep -h "^catalog: " "out/$DATE"/*.log 2>/dev/null | tail -3 || true
           exit $code
       # Even when the run was cut short: every subject finished so far, with
