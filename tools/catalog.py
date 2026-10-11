@@ -9,12 +9,13 @@ the whole offer until itch, the only store, exists for the finer builds.
 Environment (all optional to build; tools/publish.sh needs them to deploy):
     CATALOG_PUBLIC_BASE  where the objects are served from, ending in / (default
                          `objects/`, beside the pages)
+    CATALOG_INTAKE_URL   deployed HTTPS /v1/requests URL; takes precedence
     EDGE_ZONE            the owner's domain: the request form posts to agent A's
                          public intake on it (its local URL until then)
     ITCH_URL             the pay-what-you-want page for the finer builds; empty
                          until the store exists (stage 1), and the pages then
                          read "free at 1080; finer builds soon"
-    TURNSTILE_SITEKEY    the intake's Turnstile widget, when set
+    TURNSTILE_SITEKEY    public production widget key; required to enable sending
 
 What it reads, and decides nothing about (the owner's decisions, 2026-10-03):
   - the bake (asset-explorer's tools/bake-library.gd via tools/bake.sh): every
@@ -48,43 +49,19 @@ import tomllib
 import zipfile
 import io
 from pathlib import Path
+from urllib.parse import urlsplit
+import catalog_ui as ui
 
-# The pulse's own page style and image encoder, from tools/site.py (loaded by
+# Only the image encoder is shared with the private scorecard (loaded by
 # path: `site` is also the name of a standard-library module).
 _spec = importlib.util.spec_from_file_location("pulse_site", Path(__file__).resolve().parent / "site.py")
 _site = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(_site)
-CSS, small_jpeg = _site.CSS, _site.small_jpeg
+small_jpeg = _site.small_jpeg
 
 ROOT = Path(__file__).resolve().parent.parent
 LIB = ROOT / "library"
 ZIP_DATE = (1980, 1, 1, 0, 0, 0)
-
-EXTRA_CSS = """
-.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; }
-.card { border: 1px solid var(--line); border-radius: 6px; padding: 10px; min-width: 0; }
-.card h3 { margin: 4px 0; font-size: 1em; overflow-wrap: anywhere; }
-.card img { margin: 0; aspect-ratio: 1 / 1; object-fit: cover; width: 100%; background: rgba(127,127,127,.08); }
-.noimg { aspect-ratio: 1 / 1; display: flex; align-items: center; justify-content: center;
-  background: rgba(127,127,127,.08); color: var(--mute); font-size: 13px; }
-model-viewer { width: 100%; height: 360px; background: rgba(127,127,127,.08); }
-.button { display: inline-block; padding: 8px 14px; border: 1px solid var(--fg); border-radius: 6px;
-  text-decoration: none; margin: 4px 8px 4px 0; }
-.nums { display: flex; flex-wrap: wrap; gap: 8px 24px; margin: 8px 0; }
-.nums div { min-width: 0; } .nums b { display: block; font-size: 1.2em; font-variant-numeric: tabular-nums; }
-form { display: grid; gap: 8px; max-width: 480px; }
-input, textarea { font: inherit; padding: 6px; max-width: 100%; }
-fieldset { border: 1px solid var(--line); border-radius: 6px; }
-.shots { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 8px; }
-"""
-
-
-def page(title, body, head=""):
-    return ("<!doctype html><html lang=en><head><meta charset=utf-8>"
-            "<meta name=viewport content='width=device-width,initial-scale=1'>"
-            "<title>%s</title><style>%s%s</style>%s</head><body>%s</body></html>"
-            % (html.escape(title), CSS, EXTRA_CSS, head, body))
-
 
 class Objects:
     """Content-addressed files: the name is the first 16 hex of the sha256."""
@@ -103,20 +80,35 @@ class Objects:
 
 
 def edge_urls():
-    """The intake URL from agent A's table in the library's ops/edge/README.md:
-    its public URL with EDGE_ZONE filled in when the zone is set, its local
-    `wrangler dev` URL until then (and publish refuses a page on a local URL)."""
+    """Explicit deployed URL wins; the library's zone URL is the only fallback.
+
+    workers.dev placeholders and local dev endpoints are never customer actions.
+    The library table now has four URL/method columns; do not mistake the
+    workers.dev template for a local or deployed endpoint.
+    """
+    url = os.environ.get("CATALOG_INTAKE_URL", "").strip()
+    source = "CATALOG_INTAKE_URL" if url else "not configured"
+    zone = os.environ.get("EDGE_ZONE", "").strip()
     readme = LIB / "ops" / "edge" / "README.md"
-    zone = os.environ.get("EDGE_ZONE", "")
-    urls = {"intake": "", "from": "no ops/edge/README.md in the library at this pin: no request form"}
-    if readme.exists():
+    if not url and zone and readme.exists():
         for line in readme.read_text().splitlines():
             cells = [c.strip().strip("`") for c in line.strip().strip("|").split("|")]
             if len(cells) >= 3 and cells[0].lower().startswith("intake"):
-                urls["intake"] = cells[1].replace("<zone>", zone) if zone else cells[2]
-                urls["from"] = "ops/edge/README.md (%s)" % ("zone " + zone if zone else "local, EDGE_ZONE unset")
+                url = cells[1].replace("<zone>", zone)
+                source = "ops/edge/README.md with EDGE_ZONE"
                 break
-    return urls
+    parsed = urlsplit(url)
+    valid = (parsed.scheme == "https" and bool(parsed.hostname)
+             and parsed.hostname not in ("localhost", "127.0.0.1", "::1")
+             and not any(c in url for c in "<>\\\r\n")
+             and not parsed.username and not parsed.password
+             and parsed.path == "/v1/requests" and not parsed.query and not parsed.fragment)
+    key = os.environ.get("TURNSTILE_SITEKEY", "").strip()
+    # Cloudflare's public test keys must never enable a production form.
+    test_key = key.startswith(("1x", "2x", "3x"))
+    ready = bool(valid and key and not test_key)
+    return {"intake": url if valid else "", "from": source,
+            "ready": ready, "unavailable": "" if ready else "Set a deployed HTTPS CATALOG_INTAKE_URL (or EDGE_ZONE) and a production TURNSTILE_SITEKEY"}
 
 
 # The one place this is written (the principal session, 2026-10-03): under the
@@ -180,7 +172,7 @@ def committed(gid):
 
 
 def facts_of(L, C):
-    rows = [("class", L.get("class")), ("size", "%.2f m" % L["extent_m"] if L.get("extent_m") else None),
+    rows = [("class", L.get("class")), ("Default extent", "%.2f m" % L["extent_m"] if L.get("extent_m") else None),
             ("rungs", L.get("mesh_rungs")), ("ladder ends", L.get("ladder_end")),
             ("taxon", C.get("taxon")), ("use", C.get("use"))]
     return [(k, v) for k, v in rows if v not in (None, "")]
@@ -287,13 +279,14 @@ def main(argv):
         variant = key[len(default) + 1:] if key.startswith(default + "-") else ""
         return "subject/%s/%s" % (gid, (variant + "/") if variant else "")
 
-    cards, gaps_all = [], []
+    entries, gaps_all = [], []
+    for asset in (ROOT / "tools" / "catalog-assets").iterdir():
+        if asset.suffix in (".css", ".js"):
+            shutil.copyfile(asset, site / asset.name)
     for e in sorted(bake.get("entries", []), key=lambda e: e["key"]):
         key, gid = e["key"], e.get("generator", e["key"])
         slug = key.replace("/", "_")
         path = subject_path(key, gid)
-        up = "../" * path.rstrip("/").count("/") + "../"
-        rel = lambda u, up=up: u if "://" in u else up + u
         L, C = committed(gid)
         rungs = sorted(e.get("rungs", []), key=lambda r: int(r.get("rung", 0)))
         members, listed, rung0, gaps, no_atlas = [], [], None, [], []
@@ -315,6 +308,11 @@ def main(argv):
                     listed.append("%s/%s  (the impostor's atlas)" % (slug, Path(atlas).name))
                 else:
                     no_atlas.append(int(r.get("rung", 0)))
+        # A package must carry every declared mesh rung as well as its end.
+        expected = int(L.get("mesh_rungs") or 0)
+        present = {int(r.get("rung", 0)) for r in rungs}
+        for missing in sorted(set(range(expected)) - present):
+            gaps.append("rung %d: absent from this bake" % missing)
         # THE LADDER END IS PART OF THE ASSET (the owner, 2026-10-03): name the
         # rung that lacks its impostor atlas, the last rung of the committed
         # ladder when the bake does not carry it at all.
@@ -353,92 +351,43 @@ def main(argv):
             small_jpeg(png, tmp)
             shots.append(objs.put(tmp.read_bytes(), ".jpg", "render"))
             tmp.unlink()
-        thumb = ("<img src='%s' alt='%s' loading=lazy>" % (html.escape(shots[0]), html.escape(key))
-                 if shots else "<div class=noimg>no render this run</div>")
-        dl = ("<a href='%s' download='%s.zip'>free download</a>" % (html.escape(zip_url), slug)
-              if zip_url else ("<span>no download yet: rung %s lacks its impostor atlas</span>"
-                               % ", ".join(str(k) for k in sorted(no_atlas)) if no_atlas else "<span>no download yet</span>"))
-        cards.append("<div class=card><a href='%s'>%s</a><h3><a href='%s'>%s</a></h3>"
-                     "<p class=mute>%d rung(s) &middot; %s</p></div>" % (path, thumb, path, html.escape(key), len(rungs), dl))
-
-        body = ["<p><a href='%sindex.html'>&larr; every subject</a></p><h1>%s</h1>" % (up, html.escape(key))]
-        if rung0:
-            body.append("<model-viewer src='%s' alt='%s, its 1080 rung 0' camera-controls auto-rotate "
-                        "shadow-intensity=1 loading=lazy></model-viewer>" % (html.escape(rel(rung0)), html.escape(key)))
-        # THE TWO NUMBERS (the owner, 2026-10-03), the scorecard's, for the
-        # generator's default build.
+        variant = ui.variant_of(key, gid)
         cost, err = two_numbers(scores.get(gid))
-        default = key == gid.replace("/", "-")
-        if cost is not None:
-            body.append("<div class=nums><div>draw cost at the 1080 baseline<b>%s</b></div>"
-                        "<div>error at the finest affordable band<b>%s</b></div></div>%s" % (
-                            "{:,}".format(cost),
-                            ("%.1f px (band %d)" % (err[1], err[0])) if err and err[1] is not None else "no band affordable",
-                            "" if default else "<p class=mute>for %s's default build; this is a variant of it</p>" % html.escape(gid)))
-        # THE STORE IS ITCH AND ONLY ITCH, and it does not exist until stage 1's
-        # number holds (the-release-infrastructure-this-week, revised
-        # 2026-10-03): an empty ITCH_URL reads as the plan's own words.
-        paid = ("<a class=button href='%s' rel=noopener target=_blank>finer builds: pay what you want on itch</a>"
-                % html.escape(itch)) if itch else "<span class=mute>free at 1080; finer builds soon</span>"
-        if zip_url:
-            body.append("<p><a class=button href='%s' download='%s.zip'>free download, the 1080 bake (%d KB)</a>%s</p>" % (
-                html.escape(rel(zip_url)), slug, (len(zipped) + 1023) // 1024, paid))
-            body.append("<p class=mute>Every rung's glTF of its 1080 ladder%s, ATTRIBUTION.txt and the licence texts, "
-                        "under %s: use, change and sell them anywhere, as long as you credit them.%s</p>" % (
-                            " down to its impostor and atlas" if L.get("ladder_end") == "impostor" else "",
-                            html.escape(SPDX_NAMES.get(licence or "", licence or "?")),
-                            " Builds for finer screens are pay-what-you-want on itch and carry the same attribution."
-                            if itch else ""))
-        else:
-            body.append("<p class=warn>No download yet: %s.</p><p>%s</p>" % (html.escape("; ".join(gaps)), paid))
-        facts = facts_of(L, C)
-        if facts:
-            body.append("<div class=wrap><table>%s</table></div>" % "".join(
-                "<tr><th>%s</th><td style='text-align:left'>%s</td></tr>" % (html.escape(k), html.escape(str(v)))
-                for k, v in facts))
-        if shots:
-            body.append("<h2>renders</h2><div class=shots>%s</div>" % "".join(
-                "<img src='%s' alt='%s' loading=lazy>" % (html.escape(rel(s)), html.escape(key)) for s in shots))
-        body.append("<h2>credits</h2><pre>%s</pre>" % html.escape(text))
-        (site / path).mkdir(parents=True, exist_ok=True)
-        (site / path / "index.html").write_text(page(key, "".join(body), head=(
-            "<script type=module src='%s'></script>" % html.escape(cfg["model_viewer"]))))
+        e = {"key": key, "gid": gid, "slug": slug, "path": path,
+             "name": ui.name_of(gid) + (" · " + variant if variant else ""),
+             "variant": variant, "facts": facts_of(L, C), "shots": shots,
+             "model": rung0, "download": zip_url, "bytes": len(zipped),
+             "levels": len(rungs), "triangles": next((r.get("triangles") for r in rungs if int(r.get("rung", 0)) == 0), None),
+             "contents": listed, "licence_files": ["ATTRIBUTION.txt"] + [n for n, _ in licence_texts],
+             "attribution": text, "gaps": gaps, "cost": cost, "error": err}
+        entries.append(e)
 
-    sitekey = os.environ.get("TURNSTILE_SITEKEY", "")
-    request = (
-        "<h2>request a subject</h2>"
-        "<p>Missing something? Send a photo and a line about it; requests are read by a person.</p>"
-        "<form id=request method=post enctype='multipart/form-data' action='%s'>"
-        "<label>What is it? <input name=text required maxlength=2000></label>"
-        "<label>A photo (JPEG, PNG or WebP, up to 10 MB) <input name=photo type=file "
-        "accept='image/jpeg,image/png,image/webp' required></label>"
-        "<label>How to credit you (optional) <input name=contributed_by maxlength=200></label>"
-        "<label>How to reach you (optional) <input name=contact maxlength=200></label>"
-        "<fieldset><legend>I took this photo and grant it under</legend>"
-        "<label><input name=licence type=radio value=CC-BY-4.0 required checked> CC BY 4.0 (credit me)</label> "
-        "<label><input name=licence type=radio value=CC0-1.0> CC0 (no credit needed)</label></fieldset>"
-        "%s<button type=submit>Send the request</button><p id=sent class=mute></p></form>"
-        "<script>document.getElementById('request').addEventListener('submit',async e=>{e.preventDefault();"
-        "const f=e.target,s=document.getElementById('sent');s.textContent='sending...';"
-        "try{const r=await fetch(f.action,{method:'POST',body:new FormData(f)});const t=await r.text();"
-        "let j={};try{j=JSON.parse(t)}catch(_){}"
-        "s.textContent=r.ok?'Received, thank you.':'Not accepted: '+(j.reason||('HTTP '+r.status));}"
-        "catch(x){s.textContent='Could not reach the request desk: '+x.message;}});</script>"
-        % (html.escape(urls["intake"]),
-           ("<div class=cf-turnstile data-sitekey='%s'></div>" % html.escape(sitekey)) if sitekey else "")
-    ) if urls["intake"] else ""
-    head_index = ("<script src='https://challenges.cloudflare.com/turnstile/v0/api.js' async defer></script>"
-                  if (sitekey and request) else "")
-    offered = sum(1 for c in cards if "free download" in c)
-    index = ["<h1>%s</h1><p class=mute>%d subjects, library %s; %d free to download with their attribution "
-             "file.</p>" % (html.escape(cfg["title"]), len(cards), html.escape(rev), offered),
-             "<div class=grid>%s</div>" % "".join(cards), "<p>%s</p>" % html.escape(DEV_MODE_LINE), request]
-    sponsors = cfg.get("sponsors_url", "")
+    itch = ui.safe_url(itch)
+    cfg["itch"] = itch
+    for e in entries:
+        path = e["path"]
+        up = "../" * (path.rstrip("/").count("/") + 1)
+        siblings = [s for s in entries if s["gid"] == e["gid"]]
+        body = ui.detail(e, siblings, up, licence, itch, DEV_MODE_LINE)
+        (site / path).mkdir(parents=True, exist_ok=True)
+        model_viewer = ui.safe_url(cfg["model_viewer"])
+        head = '<script type="module" src="%s"></script>' % html.escape(model_viewer, quote=True)
+        (site / path / "index.html").write_text(ui.page(e["name"], body, up, head))
+
+    sitekey = os.environ.get("TURNSTILE_SITEKEY", "").strip()
+    request = ui.request_form(urls["intake"], sitekey, urls["ready"])
+    head_index = ('<script type="module" src="%s"></script>' % html.escape(ui.safe_url(cfg["model_viewer"]), quote=True))
+    offered = sum(bool(e["download"]) for e in entries)
+    extra = "<p class=\"small muted\">%s</p>" % html.escape(DEV_MODE_LINE)
+    sponsors = ui.safe_url(cfg.get("sponsors_url", ""))
     if sponsors:
-        index.append("<h2>buy the library a coffee</h2><p><a class=button href='%s' rel=noopener target=_blank>"
-                     "sponsor on GitHub</a></p><p>%s</p>" % (html.escape(sponsors),
-                                                           html.escape(PRIORITY_LINE if coffee_gate() else THANKS_LINE)))
-    (site / "index.html").write_text(page(cfg["title"], "".join(index), head=head_index))
+        extra += ("<div class=callout><div><h2>Buy the library a coffee</h2><p>%s</p></div>"
+                  "<a class=btn href='%s' rel=noopener target=_blank>Sponsor on GitHub</a></div>" % (
+                      html.escape(PRIORITY_LINE if coffee_gate() else THANKS_LINE), html.escape(sponsors, quote=True)))
+    body = ui.index(entries, cfg, rev, request, extra)
+    (site / "index.html").write_text(ui.page(cfg["title"], body, head=head_index, catalog=True))
+    if not urls["ready"]:
+        print("catalog: request desk unavailable -- " + urls["unavailable"])
     (site / "objects.json").write_text(json.dumps({"library": rev, "base": objs.base, "edge": urls, "itch": itch,
                                                    "objects": objs.listed}, indent=1, sort_keys=True))
     for f in (site / "objects").iterdir():
@@ -450,7 +399,7 @@ def main(argv):
     for g in gaps_all:
         print("catalog: GAP %s" % g)
     print("catalog: %d subject(s), %d with a download, %d object(s) (%d KB) in %s; intake from %s; itch %s" % (
-        len(cards), offered, len(objs.listed), sum(o["bytes"] for o in objs.listed.values()) // 1024, site,
+        len(entries), offered, len(objs.listed), sum(o["bytes"] for o in objs.listed.values()) // 1024, site,
         urls["from"], "set" if itch else "unset"))
 
 

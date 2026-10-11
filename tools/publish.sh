@@ -58,8 +58,11 @@ PY
 python3 "$ROOT/tools/catalog.py" "$RUN" || { say "REFUSED: the catalog did not build"; exit 1; }
 python3 - "$RUN/catalog/objects.json" <<'PY' || { say "REFUSED: the catalog's request form points at a local URL"; exit 1; }
 import json, sys
-u = json.load(open(sys.argv[1]))["edge"].get("intake", "")
-sys.exit(1 if "127.0.0.1" in u or "localhost" in u else 0)
+edge = json.load(open(sys.argv[1]))["edge"]
+# An unconfigured request desk is explicitly unavailable, never a broken
+# customer form. Enabled desks must pass the generator's URL and key checks.
+u = edge.get("intake", "")
+sys.exit(1 if edge.get("ready") and (not u.startswith("https://") or "<" in u or "localhost" in u or "127.0.0.1" in u) else 0)
 PY
 
 # 3. THE OBJECTS, by hash: a name is its content, so a put is idempotent.

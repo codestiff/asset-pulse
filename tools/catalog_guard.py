@@ -10,10 +10,11 @@ finished; this keeps the fuller live one instead.
 Exit 0: deploy (prints both counts). Exit 1: keep the live one. No live page
 (404: the first deploy, Pages just turned on) counts as zero, so the first
 catalog always deploys; a live page that cannot be read for any other reason
-(the network, a 5xx) keeps it, since a fuller catalog may be behind the error. A subject is one card on the index
-(`<div class=card>`, tools/catalog.py), counted the same way on both sides.
+(the network, a 5xx) keeps it, since a fuller catalog may be behind the error. An entry is one marked stable subject link on the new index, or one
+`<div class=card>` on the legacy index. Grouping variants never changes the unit.
 """
 import re
+from html.parser import HTMLParser
 import sys
 import urllib.error
 import urllib.request
@@ -23,7 +24,19 @@ CARD = re.compile(r"<div class=card>")
 
 
 def count(html):
-    return len(CARD.findall(html or ""))
+    class Entries(HTMLParser):
+        def __init__(self):
+            super().__init__()
+            self.keys = set()
+        def handle_starttag(self, tag, attrs):
+            key = dict(attrs).get("data-catalog-entry")
+            if tag == "a" and key:
+                self.keys.add(key)
+    entries = Entries()
+    entries.feed(html or "")
+    # Old live catalogs count one div per bake entry. New catalogs group
+    # variants but mark one stable link per entry, preserving the same unit.
+    return len(entries.keys) if entries.keys else len(CARD.findall(html or ""))
 
 
 def read(where):
