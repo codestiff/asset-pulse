@@ -3,6 +3,7 @@ name: catalog tests
 on:
   pull_request:
     paths:
+      - 'catalog.json'
       - 'tools/catalog*'
       - 'tools/catalog-assets/**'
       - 'tools/test_catalog*'
@@ -13,6 +14,7 @@ on:
   push:
     branches: [main]
     paths:
+      - 'catalog.json'
       - 'tools/catalog*'
       - 'tools/catalog-assets/**'
       - 'tools/test_catalog*'
@@ -39,13 +41,17 @@ jobs:
       - name: Install local test dependencies
         run: |
           python -m pip install -r tools/catalog-test-requirements.txt
-          python -m playwright install --with-deps chromium
+          python -m playwright install --with-deps chromium webkit
       - name: Packaging and deployment guards
         run: |
           python -m unittest discover -s tools -p 'test_catalog.py'
           python tools/test_catalog_guard.py
       - name: Customer browser behavior (isolated fixtures only)
         run: python tools/test_catalog_browser.py
+      - name: Real renderer and ZIP downloads (Chromium and WebKit)
+        run: |
+          python tools/test_catalog_viewer.py
+          CATALOG_BROWSER=webkit python tools/test_catalog_viewer.py
       - name: Syntax checks
         run: |
           python -m py_compile tools/catalog.py tools/catalog_ui.py tools/catalog_guard.py

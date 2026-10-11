@@ -11,6 +11,7 @@ import json
 import tempfile
 import threading
 import unittest
+import zipfile
 from pathlib import Path
 
 from playwright.sync_api import sync_playwright
@@ -64,13 +65,26 @@ class BrowserTests(unittest.TestCase):
                 else: request.fulfill(status=status, content_type='application/json', headers={'access-control-allow-origin': '*'}, body=json.dumps(body))
             else: request.abort()  # No other external services in regression tests.
         self.page.route('**/*', route)
-        self.page.goto(self.url)
+        self.page.goto(self.url + '?available=0')
 
     def tearDown(self):
         self.assertEqual(self.errors, []); self.context.close()
 
     def shown(self): return self.page.locator('[data-asset]:visible').count()
     def advance(self): self.page.locator('#nextStep').click()
+
+    def test_catalog_opens_on_complete_downloads_with_optional_unfinished_assets(self):
+        self.page.goto(self.url)
+        self.assertTrue(self.page.locator('#available').is_checked())
+        self.assertEqual(self.shown(), 2)
+        self.page.locator('#available').uncheck()
+        self.assertEqual(self.shown(), 3)
+        self.assertIn('available=0', self.page.url)
+        self.page.reload()
+        self.assertEqual(self.shown(), 3)
+        self.page.locator('[data-clear-filters]').first.click()
+        self.assertEqual(self.shown(), 2)
+
     def fill_request(self, wait_for_bot=True):
         self.page.locator('#requestText').fill('<script>window.injected=true</script> A coastal prop')
         self.advance()
@@ -117,6 +131,43 @@ class BrowserTests(unittest.TestCase):
         self.assertEqual(buttons.nth(1).get_attribute('aria-pressed'), 'true')
         self.assertEqual(buttons.nth(0).get_attribute('aria-pressed'), 'false')
         self.assertIn('Level 1', self.page.locator('#modelStatus').inner_text())
+        self.assertEqual(self.page.locator('[data-open-model]').get_attribute('href'), target)
+
+    def test_download_click_returns_a_complete_zip_and_has_direct_fallback(self):
+        self.page.locator('[data-catalog-entry="plant-rowan"]').click()
+        link = self.page.get_by_role('link', name='Download free 1080 build')
+        with self.page.expect_download() as pending:
+            link.click()
+        download = pending.value
+        self.assertIsNone(download.failure())
+        with zipfile.ZipFile(download.path()) as archive:
+            self.assertIsNone(archive.testzip())
+            self.assertIn('ATTRIBUTION.txt', archive.namelist())
+            self.assertIn('plant-rowan/rung0.glb', archive.namelist())
+        fallback = self.page.locator('[data-open-package]')
+        self.assertEqual(fallback.get_attribute('href'), link.get_attribute('href'))
+        self.assertEqual(fallback.get_attribute('target'), '_blank')
+        self.assertIsNone(fallback.get_attribute('download'))
+
+    def test_viewer_failure_is_actionable_and_a_late_load_recovers(self):
+        self.page.locator('[data-catalog-entry="plant-rowan"]').click()
+        self.page.locator('model-viewer').dispatch_event('error')
+        self.assertTrue(self.page.locator('#retryPreview').is_visible())
+        self.assertIn('could not load', self.page.locator('.loading-note').inner_text())
+        self.assertTrue(self.page.locator('[data-open-model]').is_visible())
+        self.page.locator('model-viewer').dispatch_event('load')
+        self.assertFalse(self.page.locator('#retryPreview').is_visible())
+        self.assertIn('Drag to rotate', self.page.locator('.loading-note').inner_text())
+
+    def test_missing_viewer_module_does_not_leave_an_endless_loading_message(self):
+        self.page.route('**/model-viewer.min.js', lambda route: route.abort())
+        self.page.clock.install()
+        self.page.locator('[data-catalog-entry="plant-rowan"]').click()
+        self.page.clock.fast_forward(16000)
+        self.assertTrue(self.page.locator('#retryPreview').is_visible())
+        self.assertIn('could not load', self.page.locator('.loading-note').inner_text())
+        self.assertTrue(self.page.get_by_role('link', name='Download free 1080 build').is_visible())
+        self.assertTrue(self.page.locator('model-viewer img[slot="poster"]').is_visible())
 
     def test_validation_preview_and_safe_review(self):
         self.advance(); self.assertIn('Describe', self.page.locator('#textError').inner_text())

@@ -25,16 +25,31 @@
         if (catalogQuery) { const target = new URL(link.href); target.searchParams.set('catalog', catalogQuery); link.href = target.href; }
       });
     }
-    document.querySelectorAll('model-viewer').forEach(model => model.addEventListener('error', () => {
+    document.querySelectorAll('model-viewer').forEach(model => {
       const note = document.querySelector('.loading-note');
-      if (note) note.textContent = 'The 3D preview could not load. Use the library renders below when available; you can still download a complete package.';
-    }));
+      const retry = $('retryPreview');
+      const failed = () => {
+        if (note) note.textContent = 'The interactive preview could not load. Retry it, open the GLB directly, or use the still renders below. Your browser needs WebGL for the interactive view.';
+        if (retry) retry.hidden = false;
+      };
+      const loaded = () => {
+        if (note) note.textContent = 'Drag to rotate. Scroll or pinch to zoom.';
+        if (retry) retry.hidden = true;
+      };
+      model.addEventListener('error', failed);
+      model.addEventListener('load', loaded);
+      document.querySelector('[data-model-viewer-module]')?.addEventListener('error', failed);
+      const timer = setTimeout(() => { if (!model.loaded) failed(); }, 15000);
+      model.addEventListener('load', () => clearTimeout(timer));
+      if (model.loaded) { clearTimeout(timer); loaded(); }
+      if (retry) retry.addEventListener('click', () => location.reload());
+    });
     document.querySelectorAll('[data-model-src]').forEach(button => button.addEventListener('click', () => {
       const model = document.querySelector('.detailart model-viewer');
       if (!model) return;
-      model.src = button.dataset.modelSrc;
       // setAttribute also preserves the chosen level while the viewer module loads.
       model.setAttribute('src', button.dataset.modelSrc);
+      document.querySelector('[data-open-model]')?.setAttribute('href', button.dataset.modelSrc);
       document.querySelectorAll('[data-model-src]').forEach(choice => {
         choice.classList.toggle('active', choice === button);
         choice.setAttribute('aria-pressed', String(choice === button));
@@ -53,7 +68,7 @@
     if (!assets.some(asset => asset.category === category)) category = '';
     $('search').value = params.get('q') || '';
     $('sort').value = ['name', 'reverse', 'available'].includes(params.get('sort')) ? params.get('sort') : 'name';
-    $('available').checked = params.get('available') === '1';
+    $('available').checked = params.get('available') !== '0';
     $('discovery').hidden = false;
     $('filters').hidden = false;
     const query = () => {
@@ -61,7 +76,7 @@
       if ($('search').value) p.set('q', $('search').value);
       if (category) p.set('category', category);
       if ($('sort').value !== 'name') p.set('sort', $('sort').value);
-      if ($('available').checked) p.set('available', '1');
+      if (!$('available').checked) p.set('available', '0');
       return p.toString();
     };
     const save = () => writeState({ query: query(), y: window.scrollY,
@@ -95,7 +110,7 @@
     ['search', 'sort', 'available'].forEach(id => $(id).addEventListener(id === 'search' ? 'input' : 'change', () => { render(); save(); }));
     document.querySelectorAll('[data-category]').forEach(button => button.addEventListener('click', () => { category = button.dataset.category; render(); save(); }));
     document.querySelectorAll('[data-clear-filters]').forEach(button => button.addEventListener('click', () => {
-      category = ''; $('search').value = ''; $('available').checked = false; $('sort').value = 'name'; render(); save();
+      category = ''; $('search').value = ''; $('available').checked = true; $('sort').value = 'name'; render(); save();
     }));
     $('filtersToggle').addEventListener('click', () => {
       const on = $('filters').classList.toggle('show'); $('filtersToggle').setAttribute('aria-expanded', String(on));

@@ -54,7 +54,15 @@ class Fixture:
         self.asset_source = catalog.ROOT / 'tools' / 'catalog-assets'
         (self.root / 'tools').mkdir()
         (self.root / 'tools' / 'catalog-assets').symlink_to(self.asset_source, target_is_directory=True)
-        (self.root / 'catalog.json').write_text(json.dumps({'title': 'Fixture library', 'model_viewer': 'https://cdn.jsdelivr.net/npm/@google/model-viewer@4.0.0/dist/model-viewer.min.js'}))
+        cfg = {'title': 'Fixture library'}
+        cache = self.root / 'out/viewer-cache'; cache.mkdir(parents=True)
+        for setting, data in [('model_viewer', b'// isolated fixture: real WebGL tested separately'),
+                              ('model_viewer_license', b'Fixture viewer license')]:
+            digest = hashlib.sha256(data).hexdigest()
+            (cache / digest).write_bytes(data)
+            cfg[setting] = 'https://example.com/' + setting
+            cfg[setting + '_sha256'] = digest
+        (self.root / 'catalog.json').write_text(json.dumps(cfg))
 
     def add(self, gid, key, end='mesh', taxon='', use=''):
         group, name = gid.split('/')
@@ -176,6 +184,19 @@ class CatalogTests(unittest.TestCase):
         self.assertEqual(catalog_guard.downloads("<a href='objects/a.zip' download='a.zip'>Free</a>"), 1)
         self.assertEqual(catalog_guard.downloads('<a data-catalog-entry="a" data-downloadable="true"></a>'
                                                '<a data-catalog-entry="b" data-downloadable="false"></a>'), 1)
+
+    def test_viewer_is_self_hosted_and_requires_verified_bytes(self):
+        site = self.fixture.build()
+        detail = (site / 'subject/plant/rowan/index.html').read_text()
+        self.assertIn('src="../../../model-viewer.min.js"', detail)
+        self.assertNotIn('src="https://', detail)
+        self.assertTrue((site / 'model-viewer-LICENSE.txt').is_file())
+        cfg = json.loads((self.fixture.root / 'catalog.json').read_text())
+        (self.fixture.root / 'out/viewer-cache' / cfg['model_viewer_sha256']).write_bytes(b'corrupt')
+        import io
+        with patch.object(catalog.urllib.request, 'urlopen', return_value=io.BytesIO(b'wrong download')):
+            with self.assertRaisesRegex(SystemExit, 'viewer integrity check failed'):
+                self.fixture.build()
 
 
 if __name__ == '__main__': unittest.main()

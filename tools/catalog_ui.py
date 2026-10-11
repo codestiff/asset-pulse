@@ -100,7 +100,7 @@ def index(entries, cfg, rev, request, extra=''):
 <button id="filtersToggle" class="btn filtersToggle" type="button" aria-controls="filters" aria-expanded="false">Filters</button>
 <select id="sort" aria-label="Sort assets"><option value="name">Name: A–Z</option><option value="reverse">Name: Z–A</option><option value="available">Downloads first</option></select></div></div>
 <div class="layout"><aside class="filters" id="filters" hidden><div class="eyebrow">Categories</div><div id="categories">{category_html}</div>
-<label class="check"><input id="available" type="checkbox"><span>Downloadable assets only</span></label><p class="small muted" style="margin-top:15px">Free 1080-target builds.<br>Credit included with each package.</p><button class="btn" type="button" data-clear-filters>Clear filters</button></aside>
+<label class="check"><input id="available" type="checkbox" checked><span>Downloadable assets only</span></label><p class="small muted" style="margin-top:15px">Uncheck to include assets still in preparation.<br>Credit included with each download.</p><button class="btn" type="button" data-clear-filters>Clear filters</button></aside>
 <div><div id="assetGrid" class="grid">{''.join(cards)}</div><div id="empty" class="empty" hidden><h2>No matching assets.</h2><p>Try another search or category, or tell us what your scene needs.</p><button class="btn" type="button" data-clear-filters>Clear filters</button> <a class="btn primary" href="#request">Request an asset</a></div></div></div>
 <noscript><p>All builds are listed above. Enable JavaScript for search, filters and guided requests.</p></noscript>
 <div class="callout"><div><h3>Something missing from your world?</h3><p class="small muted">Send a reference photo and describe the asset you need.</p></div><a class="btn" href="#request">Request an asset ↗</a></div>
@@ -121,13 +121,16 @@ def detail(entry, siblings, up, licence, itch, dev_line):
         facts.append(('Model format', 'GLB (glTF binary)'))
     if e['download']:
         download = f'<a class="btn primary" href="{esc(rel(e["download"]))}" download="{esc(e["slug"])}.zip">Download free 1080 build ↓</a><p class="small muted">ZIP · {(e["bytes"] + 1023) // 1024:,} KiB · {esc(licence or "")}. Attribution required: include the supplied credit lines when using this asset.</p>'
+        download += f'<p class="small muted">Download not starting? <a href="{esc(rel(e["download"]))}" target="_blank" rel="noopener" data-open-package>Open the ZIP in a new tab</a> and save it from your browser.</p>'
     else:
         download = f'<p class="status">Download unavailable: {esc("; ".join(e["gaps"]) or "No complete package in this bake")}.</p>'
     paid = f'<a class="btn" href="{esc(itch)}" target="_blank" rel="noopener">Finer builds on itch ↗</a><p class="small muted">Pay what you want; the same attribution applies.</p>' if itch else '<p class="small muted" style="margin-top:12px">Free at 1080; finer builds soon.</p>'
     nav = ''.join(f'<a class="btn" href="{esc(rel(s["path"]))}" {"aria-current=page" if s is e else ""}>{esc(s["variant"] or "Default build")}</a>' for s in siblings) if len(siblings) > 1 else ''
     # Interactive model first on details; actual renders remain the fallback.
     poster = f'poster="{esc(rel(e["shots"][0]))}"' if e["shots"] else ""
-    model = f'<model-viewer src="{esc(rel(e["model"]))}" alt="{esc(e["name"])} — baked model" camera-controls shadow-intensity="1" loading="eager" {poster}><span slot="poster" class="noimg">Load 3D preview</span></model-viewer>' if e['model'] else preview(e, rel, True)
+    poster_content = f'<img slot="poster" src="{esc(rel(e["shots"][0]))}" alt="{esc(e["name"])} — library render">' if e['shots'] else '<span slot="poster" class="noimg">Loading 3D preview…</span>'
+    model = f'<model-viewer src="{esc(rel(e["model"]))}" alt="{esc(e["name"])} — baked model" camera-controls touch-action="pan-y" shadow-intensity="1" loading="eager" {poster}>{poster_content}</model-viewer>' if e['model'] else preview(e, rel, True)
+    recovery = f'<div class="preview-recovery"><button class="btn" type="button" id="retryPreview" hidden>Retry 3D preview</button> <a class="small" href="{esc(rel(e["model"]))}" target="_blank" rel="noopener" data-open-model>Open the GLB model</a></div>' if e['model'] else ''
     models = e.get('models', [])
     controls = ''
     if e['model'] and len(models) > 1:
@@ -139,7 +142,7 @@ def detail(entry, siblings, up, licence, itch, dev_line):
         error = f'{e["error"][1]:.1f} px (band {e["error"][0]})' if e['error'] and e['error'][1] is not None else 'No band affordable'
         numbers = f'<h3>Measured at the library baseline</h3><div class="facts"><div class="fact"><span>Draw cost at 1080</span><b>{e["cost"]:,}</b></div><div class="fact"><span>Error at finest affordable band</span><b>{esc(error)}</b></div></div>' + ('<p class="small muted">These measurements describe the parent’s default build.</p>' if e['variant'] else '')
     return f'''<section class="detail"><div class="breadcrumbs"><a href="{up}index.html" data-return-catalog>← Back to catalog</a> / {esc(category_of(e['gid']))} / {esc(e['name'])}</div>
-<div class="detailgrid"><div><div class="art detailart">{model}</div>{controls}<p class="loading-note">{'Drag to rotate the 3D preview when loaded. Model previews require a browser with WebGL.' if e['model'] else 'Library render shown where available. The interactive model is not ready yet.'}</p>{f'<div class="shots">' + ''.join(f'<img src="{esc(rel(s))}" alt="{esc(e["name"])} — library render" loading="lazy">' for s in e['shots']) + '</div>' if e['shots'] else ''}{'<p class="small muted">Still renders show the parent default build; the 3D model shows this variant.</p>' if e['variant'] and e['shots'] else ''}</div>
+<div class="detailgrid"><div><div class="art detailart">{model}</div>{controls}<p class="loading-note" role="status">{'Loading the interactive 3D preview…' if e['model'] else 'Library render shown where available. The interactive model is not ready yet.'}</p>{recovery}{f'<div class="shots">' + ''.join(f'<img src="{esc(rel(s))}" alt="{esc(e["name"])} — library render" loading="lazy">' for s in e['shots']) + '</div>' if e['shots'] else ''}{'<p class="small muted">Still renders show the parent default build; the 3D model shows this variant.</p>' if e['variant'] and e['shots'] else ''}</div>
 <div><div class="eyebrow">{esc(category_of(e['gid']))}</div><h1>{esc(e['name'])}</h1><p class="muted">{esc(e['gid'])}{' · ' + esc(e['variant']) if e['variant'] else ''}</p>
 <div class="variantnav" aria-label="Asset builds">{nav}</div><div class="downloadbox"><h3>{'Free download' if e['download'] else 'Package in preparation'}</h3>{download}{paid}</div>
 <div class="facts">{''.join(f'<div class="fact"><span>{esc(k)}</span><b>{esc(v)}</b></div>' for k, v in facts)}</div></div></div>
