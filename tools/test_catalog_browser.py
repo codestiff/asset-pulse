@@ -30,6 +30,12 @@ class BrowserTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.temp = tempfile.TemporaryDirectory(); cls.fixture = Fixture(cls.temp.name)
+        # Different bytes and URLs prove the level switch loads another model.
+        entry = cls.fixture.entries[0]
+        from test_catalog import glb
+        (cls.fixture.bake / 'rowan-level1.glb').write_bytes(glb(0.5))
+        entry['rungs'].append({'rung': 1, 'gltf': 'rowan-level1.glb', 'triangles': 1})
+        (cls.fixture.bake / 'manifest.json').write_text(json.dumps({'entries': cls.fixture.entries}))
         cls.site = cls.fixture.build({'CATALOG_INTAKE_URL': 'https://intake.example.com/v1/requests', 'TURNSTILE_SITEKEY': 'production-fixture-key'})
         cls.server = http.server.ThreadingHTTPServer(('127.0.0.1', 0), functools.partial(Quiet, directory=str(cls.site)))
         threading.Thread(target=cls.server.serve_forever, daemon=True).start()
@@ -99,6 +105,18 @@ class BrowserTests(unittest.TestCase):
         self.page.locator('[data-catalog-entry="built-vase"]').click(); self.page.go_back()
         self.assertEqual(self.page.locator('#sort').input_value(), 'reverse')
         self.page.wait_for_function('window.scrollY > 300')
+
+    def test_detail_level_controls_select_baked_models(self):
+        self.page.locator('[data-catalog-entry="plant-rowan"]').click()
+        buttons = self.page.locator('[data-model-src]')
+        self.assertEqual(buttons.count(), 2)
+        target = buttons.nth(1).get_attribute('data-model-src')
+        self.assertNotEqual(target, buttons.nth(0).get_attribute('data-model-src'))
+        buttons.nth(1).click()
+        self.assertEqual(self.page.locator('model-viewer').get_attribute('src'), target)
+        self.assertEqual(buttons.nth(1).get_attribute('aria-pressed'), 'true')
+        self.assertEqual(buttons.nth(0).get_attribute('aria-pressed'), 'false')
+        self.assertIn('Level 1', self.page.locator('#modelStatus').inner_text())
 
     def test_validation_preview_and_safe_review(self):
         self.advance(); self.assertIn('Describe', self.page.locator('#textError').inner_text())

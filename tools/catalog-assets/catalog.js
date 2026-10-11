@@ -29,6 +29,18 @@
       const note = document.querySelector('.loading-note');
       if (note) note.textContent = 'The 3D preview could not load. Use the library renders below when available; you can still download a complete package.';
     }));
+    document.querySelectorAll('[data-model-src]').forEach(button => button.addEventListener('click', () => {
+      const model = document.querySelector('.detailart model-viewer');
+      if (!model) return;
+      model.src = button.dataset.modelSrc;
+      // setAttribute also preserves the chosen level while the viewer module loads.
+      model.setAttribute('src', button.dataset.modelSrc);
+      document.querySelectorAll('[data-model-src]').forEach(choice => {
+        choice.classList.toggle('active', choice === button);
+        choice.setAttribute('aria-pressed', String(choice === button));
+      });
+      $('modelStatus').textContent = 'Selected ' + button.textContent + '. Drag to rotate when loaded.';
+    }));
     return;
   }
 

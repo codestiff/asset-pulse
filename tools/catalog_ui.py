@@ -32,7 +32,8 @@ def variant_of(key, gid):
 
 def category_of(gid):
     group = gid.split('/', 1)[0]
-    return {'plant': 'Vegetation', 'rock': 'Rocks', 'built': 'Props'}.get(group, name_of(group))
+    return {'plant': 'Vegetation', 'rock': 'Rocks', 'stone': 'Rocks',
+            'built': 'Props', 'animal': 'Animals', 'alga': 'Algae'}.get(group, name_of(group))
 
 
 def page(title, body, up='', head='', catalog=False):
@@ -57,7 +58,7 @@ def preview(entry, rel=lambda u: u, detail=False):
 
 
 def entry_link(entry):
-    return f'<a data-catalog-entry="{esc(entry["key"])}" href="{esc(entry["path"])}">{esc(entry["variant"] or entry["name"])}</a>'
+    return f'<a data-catalog-entry="{esc(entry["key"])}" data-downloadable="{str(bool(entry["download"])).lower()}" href="{esc(entry["path"])}">{esc(entry["variant"] or entry["name"])}</a>'
 
 
 def index(entries, cfg, rev, request, extra=''):
@@ -73,7 +74,7 @@ def index(entries, cfg, rev, request, extra=''):
         data.append({'id': gid, 'category': category, 'name': name_of(gid), 'search': words, 'available': available})
         # Mark every baked entry exactly once: the deployment guard still counts
         # variants even though the customer browses one card per parent asset.
-        selected = f'<a class="cardlink" data-catalog-entry="{esc(default["key"])}" href="{esc(default["path"])}">'
+        selected = f'<a class="cardlink" data-catalog-entry="{esc(default["key"])}" data-downloadable="{str(bool(default["download"])).lower()}" href="{esc(default["path"])}">'
         summary = ' · '.join(str(v) for k, v in default['facts'] if k in ('class', 'taxon', 'use'))
         cards.append(f'''<article class="card" data-asset="{esc(gid)}">{selected}<div class="art">{preview(default)}</div>
 <div class="cardbody"><div class="eyebrow">{esc(category)}</div><h3>{esc(name_of(gid))}</h3><div class="tags">{esc(summary or gid)}</div>
@@ -113,7 +114,7 @@ def detail(entry, siblings, up, licence, itch, dev_line):
     facts = e['facts'][:]
     if e['variant']:
         facts = [(k + ' (parent default)', v) for k, v in facts]
-    facts += [('Baked detail levels', e['levels'])]
+    facts += [('Baked detail levels', len(e.get('models', [])))]
     if e['triangles'] is not None:
         facts.append(('Finest baked mesh', f'{e["triangles"]:,} triangles'))
     if e['contents']:
@@ -127,12 +128,18 @@ def detail(entry, siblings, up, licence, itch, dev_line):
     # Interactive model first on details; actual renders remain the fallback.
     poster = f'poster="{esc(rel(e["shots"][0]))}"' if e["shots"] else ""
     model = f'<model-viewer src="{esc(rel(e["model"]))}" alt="{esc(e["name"])} — baked model" camera-controls shadow-intensity="1" loading="eager" {poster}><span slot="poster" class="noimg">Load 3D preview</span></model-viewer>' if e['model'] else preview(e, rel, True)
+    models = e.get('models', [])
+    controls = ''
+    if e['model'] and len(models) > 1:
+        controls = '<div class="previewbar" role="group" aria-label="Preview detail level">' + ''.join(
+            f'<button type="button" data-model-src="{esc(rel(m["url"]))}" data-model-label="{esc(m["name"])}" aria-pressed="{str(m["rung"] == 0).lower()}" class="{"active" if m["rung"] == 0 else ""}">Level {m["rung"]} · {esc(m["name"])}</button>'
+            for m in models) + '</div><p id="modelStatus" class="small muted" role="status">Each level shows its actual baked model.</p>'
     numbers = ''
     if e['cost'] is not None:
         error = f'{e["error"][1]:.1f} px (band {e["error"][0]})' if e['error'] and e['error'][1] is not None else 'No band affordable'
         numbers = f'<h3>Measured at the library baseline</h3><div class="facts"><div class="fact"><span>Draw cost at 1080</span><b>{e["cost"]:,}</b></div><div class="fact"><span>Error at finest affordable band</span><b>{esc(error)}</b></div></div>' + ('<p class="small muted">These measurements describe the parent’s default build.</p>' if e['variant'] else '')
     return f'''<section class="detail"><div class="breadcrumbs"><a href="{up}index.html" data-return-catalog>← Back to catalog</a> / {esc(category_of(e['gid']))} / {esc(e['name'])}</div>
-<div class="detailgrid"><div><div class="art detailart">{model}</div><p class="loading-note">Drag to rotate the 3D preview when loaded. Model previews require a browser with WebGL.</p>{f'<div class="shots">' + ''.join(f'<img src="{esc(rel(s))}" alt="{esc(e["name"])} — library render" loading="lazy">' for s in e['shots']) + '</div>' if e['shots'] else ''}{'<p class="small muted">Still renders show the parent default build; the 3D model shows this variant.</p>' if e['variant'] and e['shots'] else ''}</div>
+<div class="detailgrid"><div><div class="art detailart">{model}</div>{controls}<p class="loading-note">{'Drag to rotate the 3D preview when loaded. Model previews require a browser with WebGL.' if e['model'] else 'Library render shown where available. The interactive model is not ready yet.'}</p>{f'<div class="shots">' + ''.join(f'<img src="{esc(rel(s))}" alt="{esc(e["name"])} — library render" loading="lazy">' for s in e['shots']) + '</div>' if e['shots'] else ''}{'<p class="small muted">Still renders show the parent default build; the 3D model shows this variant.</p>' if e['variant'] and e['shots'] else ''}</div>
 <div><div class="eyebrow">{esc(category_of(e['gid']))}</div><h1>{esc(e['name'])}</h1><p class="muted">{esc(e['gid'])}{' · ' + esc(e['variant']) if e['variant'] else ''}</p>
 <div class="variantnav" aria-label="Asset builds">{nav}</div><div class="downloadbox"><h3>{'Free download' if e['download'] else 'Package in preparation'}</h3>{download}{paid}</div>
 <div class="facts">{''.join(f'<div class="fact"><span>{esc(k)}</span><b>{esc(v)}</b></div>' for k, v in facts)}</div></div></div>

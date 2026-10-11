@@ -32,6 +32,19 @@ def guard(new, live):
                           env={"PATH": "/usr/bin:/bin", "NO_PROXY": "127.0.0.1", "no_proxy": "127.0.0.1"})
 
 
+def available_site(root, n, offered, legacy=False):
+    root.mkdir(parents=True, exist_ok=True)
+    cards = []
+    for i in range(n):
+        if legacy:
+            download = f'<a href="objects/{i}.zip" download="{i}.zip">Free</a>' if i < offered else ''
+            cards.append(f'<div class=card>{download}</div>')
+        else:
+            cards.append(f'<a data-catalog-entry="x{i}" data-downloadable="{str(i < offered).lower()}" href="subject/x{i}/">Asset</a>')
+    (root / 'index.html').write_text(''.join(cards))
+    return root
+
+
 def main():
     failed = 0
     with tempfile.TemporaryDirectory() as t:
@@ -46,6 +59,9 @@ def main():
         threading.Thread(target=srv.serve_forever, daemon=True).start()
         url = "http://127.0.0.1:%d/" % srv.server_port
         cases = [
+            ("more preview cards cannot hide lost legacy downloads", available_site(t / "preview-growth", 129, 1), available_site(t / "legacy-downloads", 2, 2, True), 1),
+            ("more preview cards cannot hide lost grouped downloads", available_site(t / "preview-growth-2", 129, 1), available_site(t / "grouped-downloads", 4, 2), 1),
+            ("discovery can grow while preserving downloads", available_site(t / "complete-growth", 129, 2), available_site(t / "original-downloads", 2, 2, True), 0),
             ("grouped variants preserve 106 entries against 106 legacy cards", grouped_site(t / "grouped", 106), live, 0),
             ("104 grouped entries cannot replace 106 legacy cards", grouped_site(t / "grouped-fewer", 104), live, 1),
             ("a legacy catalog cannot shrink a grouped live catalog", site(t / "old-fewer", 104), grouped_site(t / "grouped-live", 106), 1),

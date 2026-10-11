@@ -18,13 +18,13 @@ import catalog_guard
 from PIL import Image
 
 
-def glb():
+def glb(size=1):
     """A tiny, valid fixture mesh; no expensive registry bake or production photo."""
-    geometry = struct.pack('<9f', 0, 0, 0, 1, 0, 0, 0, 1, 0)
+    geometry = struct.pack('<9f', 0, 0, 0, size, 0, 0, 0, size, 0)
     tree = {'asset': {'version': '2.0'}, 'scene': 0, 'scenes': [{'nodes': [0]}], 'nodes': [{'mesh': 0}],
             'meshes': [{'primitives': [{'attributes': {'POSITION': 0}}]}], 'buffers': [{'byteLength': len(geometry)}],
             'bufferViews': [{'buffer': 0, 'byteOffset': 0, 'byteLength': len(geometry)}],
-            'accessors': [{'bufferView': 0, 'componentType': 5126, 'count': 3, 'type': 'VEC3', 'min': [0, 0, 0], 'max': [1, 1, 0]}]}
+            'accessors': [{'bufferView': 0, 'componentType': 5126, 'count': 3, 'type': 'VEC3', 'min': [0, 0, 0], 'max': [size, size, 0]}]}
     data = json.dumps(tree).encode(); data += b' ' * (-len(data) % 4)
     return struct.pack('<4sII', b'glTF', 2, 12 + 8 + len(data) + 8 + len(geometry)) + struct.pack('<I4s', len(data), b'JSON') + data + struct.pack('<I4s', len(geometry), b'BIN\0') + geometry
 
@@ -146,6 +146,36 @@ class CatalogTests(unittest.TestCase):
     def test_old_and_new_guard_count_the_same_unit(self):
         self.assertEqual(catalog_guard.count('<div class=card>' * 4), 4)
         self.assertEqual(catalog_guard.count('<a data-catalog-entry="a"></a><a data-catalog-entry="a"></a><a data-catalog-entry="b"></a>'), 2)
+
+    def test_unbaked_library_subjects_and_variants_remain_discoverable(self):
+        card = self.fixture.lib / 'generators/plant/fern.card.json'
+        card.write_text(json.dumps({'id': 'plant/fern', 'taxon': 'Dryopteris',
+                                    'package_targets': [{'id': 'plant/fern', 'tag': 'small'}]}))
+        site = self.fixture.build()
+        index = (site / 'index.html').read_text()
+        self.assertEqual(catalog_guard.count(index), 6)
+        self.assertEqual(catalog_guard.downloads(index), 3)
+        self.assertIn('Dryopteris', index)
+        for variant in ('', 'small/'):
+            detail = (site / ('subject/plant/fern/' + variant) / 'index.html').read_text()
+            self.assertIn('The downloadable build is not ready yet', detail)
+            self.assertNotIn('Download free 1080 build', detail)
+            self.assertNotIn('data-model-src', detail)
+
+    def test_detail_levels_link_to_real_baked_objects(self):
+        entry = self.fixture.entries[0]
+        entry['rungs'].append({'rung': 1, 'gltf': entry['rungs'][0]['gltf'], 'triangles': 1})
+        (self.fixture.bake / 'manifest.json').write_text(json.dumps({'entries': self.fixture.entries}))
+        site = self.fixture.build()
+        detail = (site / 'subject/plant/rowan/index.html').read_text()
+        self.assertEqual(detail.count('data-model-src='), 2)
+        self.assertIn('Level 1', detail)
+        self.assertIn('Each level shows its actual baked model', detail)
+
+    def test_download_guard_counts_legacy_and_grouped_downloads(self):
+        self.assertEqual(catalog_guard.downloads("<a href='objects/a.zip' download='a.zip'>Free</a>"), 1)
+        self.assertEqual(catalog_guard.downloads('<a data-catalog-entry="a" data-downloadable="true"></a>'
+                                               '<a data-catalog-entry="b" data-downloadable="false"></a>'), 1)
 
 
 if __name__ == '__main__': unittest.main()
