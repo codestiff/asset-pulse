@@ -128,7 +128,8 @@ def detail(entry, siblings, up, licence, itch, dev_line):
     nav = ''.join(f'<a class="btn" href="{esc(rel(s["path"]))}" {"aria-current=page" if s is e else ""}>{esc(s["variant"] or "Default build")}</a>' for s in siblings) if len(siblings) > 1 else ''
     # Interactive model first on details; actual renders remain the fallback.
     poster = f'poster="{esc(rel(e["shots"][0]))}"' if e["shots"] else ""
-    model = f'<model-viewer src="{esc(rel(e["model"]))}" alt="{esc(e["name"])} — baked model" camera-controls touch-action="pan-y" shadow-intensity="1" loading="eager" {poster}></model-viewer>' if e['model'] else preview(e, rel, True)
+    poster_content = f'<img slot="poster" src="{esc(rel(e["shots"][0]))}" alt="{esc(e["name"])} — library render">' if e['shots'] else '<span slot="poster" class="noimg">Loading 3D preview…</span>'
+    model = f'<model-viewer src="{esc(rel(e["model"]))}" alt="{esc(e["name"])} — baked model" camera-controls touch-action="pan-y" shadow-intensity="1" loading="eager" {poster}>{poster_content}</model-viewer>' if e['model'] else preview(e, rel, True)
     recovery = f'<div class="preview-recovery"><button class="btn" type="button" id="retryPreview" hidden>Retry 3D preview</button> <a class="small" href="{esc(rel(e["model"]))}" target="_blank" rel="noopener" data-open-model>Open the GLB model</a></div>' if e['model'] else ''
     models = e.get('models', [])
     controls = ''

@@ -167,6 +167,7 @@ class BrowserTests(unittest.TestCase):
         self.assertTrue(self.page.locator('#retryPreview').is_visible())
         self.assertIn('could not load', self.page.locator('.loading-note').inner_text())
         self.assertTrue(self.page.get_by_role('link', name='Download free 1080 build').is_visible())
+        self.assertTrue(self.page.locator('model-viewer img[slot="poster"]').is_visible())
 
     def test_validation_preview_and_safe_review(self):
         self.advance(); self.assertIn('Describe', self.page.locator('#textError').inner_text())

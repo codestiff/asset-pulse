@@ -67,7 +67,7 @@ class ViewerTests(unittest.TestCase):
                         request.abort()
                 page.route('**/*', route)
                 page.goto(self.base + 'subject/plant/rowan/')
-                page.wait_for_function('document.querySelector("model-viewer").loaded === true', timeout=30000)
+                page.wait_for_function('document.querySelector("model-viewer").loaded === true && document.querySelector("model-viewer").modelIsVisible === true', timeout=30000)
                 model = page.locator('model-viewer')
                 before = model.evaluate('(el) => el.getCameraOrbit().theta')
                 box = model.bounding_box()
