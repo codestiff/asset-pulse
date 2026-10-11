@@ -48,6 +48,7 @@ import sys
 import tomllib
 import zipfile
 import io
+import urllib.request
 from pathlib import Path
 from urllib.parse import urlsplit
 import catalog_ui as ui
@@ -77,6 +78,32 @@ class Objects:
             path.write_bytes(data)
         self.listed[name] = {"bytes": len(data), "kind": kind}
         return self.base + name
+
+
+def viewer_module(cfg, site):
+    """Ship the pinned viewer with the site; visitors need no script CDN.
+
+    Verify downloads and cached bytes. If the module cannot be obtained, fail
+    the build rather than publishing detail pages with a broken viewer.
+    """
+    cache = ROOT / 'out' / 'viewer-cache'
+    cache.mkdir(parents=True, exist_ok=True)
+    for setting, filename in (('model_viewer', 'model-viewer.min.js'),
+                              ('model_viewer_license', 'model-viewer-LICENSE.txt')):
+        expected = cfg.get(setting + '_sha256', '')
+        url = cfg.get(setting, '')
+        if len(expected) != 64 or not url.startswith('https://'):
+            sys.exit('catalog: pinned viewer URL and SHA256 are required for ' + setting)
+        path = cache / expected
+        data = path.read_bytes() if path.exists() else b''
+        if hashlib.sha256(data).hexdigest() != expected:
+            with urllib.request.urlopen(url, timeout=60) as response:
+                data = response.read()
+            if hashlib.sha256(data).hexdigest() != expected:
+                sys.exit('catalog: viewer integrity check failed for ' + setting)
+            path.write_bytes(data)
+        (site / filename).write_bytes(data)
+    return 'model-viewer.min.js'
 
 
 def edge_urls():
@@ -293,6 +320,7 @@ def main(argv):
     (site / "subject").mkdir(parents=True, exist_ok=True)
     (site / "attribution").mkdir(exist_ok=True)
     objs = Objects(site / "objects", os.environ.get("CATALOG_PUBLIC_BASE", "objects/"))
+    model_viewer = viewer_module(cfg, site)
 
     def subject_path(key, gid):
         """THE STABLE URL, /subject/<id>/ (the game's inspect links to it): the
@@ -401,13 +429,12 @@ def main(argv):
         siblings = [s for s in entries if s["gid"] == e["gid"]]
         body = ui.detail(e, siblings, up, licence, itch, DEV_MODE_LINE)
         (site / path).mkdir(parents=True, exist_ok=True)
-        model_viewer = ui.safe_url(cfg["model_viewer"])
-        head = '<script type="module" src="%s"></script>' % html.escape(model_viewer, quote=True)
+        head = ('<script type="module" src="%s" data-model-viewer-module></script>' % html.escape(up + model_viewer, quote=True)) if e['model'] else ''
         (site / path / "index.html").write_text(ui.page(e["name"], body, up, head))
 
     sitekey = os.environ.get("TURNSTILE_SITEKEY", "").strip()
     request = ui.request_form(urls["intake"], sitekey, urls["ready"])
-    head_index = ('<script type="module" src="%s"></script>' % html.escape(ui.safe_url(cfg["model_viewer"]), quote=True))
+    head_index = ('<script type="module" src="%s" data-model-viewer-module></script>' % html.escape(model_viewer, quote=True)) if any(e['model'] and not e['shots'] for e in entries) else ''
     offered = sum(bool(e["download"]) for e in entries)
     extra = "<p class=\"small muted\">%s</p>" % html.escape(DEV_MODE_LINE)
     sponsors = ui.safe_url(cfg.get("sponsors_url", ""))

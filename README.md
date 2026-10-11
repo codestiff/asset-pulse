@@ -299,11 +299,21 @@ adding preview-only entries cannot hide a decrease in downloadable packages.
 
 ### Validate locally
 
+The viewer module and its upstream license are copied into the static site at
+build time, checked against the SHA256 pins in `catalog.json`. Browsers load
+the renderer from the same host as the catalog. A failed fetch or checksum
+stops the build. Viewer failures retain the library renders, show retry controls
+and offer a direct GLB link. Download pages also expose an ordinary ZIP link for
+browsers that do not handle the download attribute.
+
     python3 -m pip install -r tools/catalog-test-requirements.txt
     python3 -m playwright install chromium
     python3 -m unittest discover -s tools -p 'test_catalog.py'
     python3 tools/test_catalog_guard.py
     python3 tools/test_catalog_browser.py
+    python3 tools/test_catalog_viewer.py
+    # With Playwright WebKit and its OS dependencies installed:
+    CATALOG_BROWSER=webkit python3 tools/test_catalog_viewer.py
     node --check tools/catalog-assets/catalog.js
 
 The packaging tests require Pillow; browser tests additionally require
