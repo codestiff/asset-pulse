@@ -219,3 +219,81 @@ above then shows the catalog.
 
 The catalog and the plates are CC BY 4.0, the code MIT: see LICENSE.md.
 - 2026-10-03 23:57 UTC, workflow run #4 green (70 min, library bdc29a71, 90 subjects, 70 downloads): the cloud Routine "asset-pulse daily run" is disabled; the workflow is the daily run from here.
+
+## Customer catalog redesign
+
+`tools/catalog.py` builds the customer catalog; `tools/catalog_ui.py` and
+`tools/catalog-assets/` provide its presentation. `tools/site.py` remains the
+private owner scorecard. The customer UI follows the approved
+[prototype](https://codestiff.github.io/scratchpad/mockups/asset-catalog-v1/),
+using library metadata, actual close-up renders and baked GLB previews. None
+of the prototype's sample specifications or vector artwork are asset data.
+Variants sit under their parent asset, retain their stable subject URLs, and
+count individually in the deployment guard. Search covers readable names,
+generator/build IDs, class, taxon, use and other displayed library facts.
+Filters and sorting are carried in the URL; session storage remembers catalog
+position and expanded variants. Contact details and photos are never stored
+in browser storage. Still renders and committed dimensions describe the
+parent default; a variant's 3D preview is its own baked model.
+
+### Connect the request desk
+
+The Pages workflow reads these **repository Actions variables**. The same
+names are environment variables for local builds and `tools/publish.sh`:
+
+- `CATALOG_INTAKE_URL`: the deployed HTTPS endpoint ending in `/v1/requests`.
+  This overrides `EDGE_ZONE`; without it, `EDGE_ZONE` fills the library's
+  documented `https://requests.<zone>/v1/requests` URL. For workers.dev,
+  supply the actual URL explicitly, including the account subdomain.
+- `TURNSTILE_SITEKEY`: the public production widget key. Configure that widget
+  to allow `codestiff.github.io` and any catalog custom hostname. The matching
+  **secret** remains in the intake Worker as `TURNSTILE_SECRET`, never here.
+- `ITCH_URL`: optional finer-build offer; without it, the free 1080 build is
+  the offer and finer builds are described as coming soon.
+
+Sending is enabled only with a usable HTTPS endpoint and a non-test widget
+key. Missing settings, local URLs and unresolved placeholders produce a visible
+unavailable desk; visitors can prepare a request but cannot submit it. The
+frontend waits for a real Turnstile token, handles widget errors/expiry, and
+requires a fresh check after a failed submission. Inputs and the selected photo
+remain in the current page after failure. A successful HTTP 201 must carry an
+ID before the UI shows a receipt; it displays and can copy that exact ID.
+
+The multipart fields match the intake contract: `photo`, `text`, `licence`,
+required `contact`, required `consent=yes`, optional `contributed_by` (80
+characters, no `@`), and `cf-turnstile-response`. License and consent are
+explicit choices. Photo ownership is also confirmed in the UI. JPEG/PNG/WebP
+photos are limited to 10 MiB; remove GPS metadata before sending. The Worker
+is authoritative for image content, metadata and moderation checks. Its `say`
+and `recovery` text is displayed safely; otherwise the UI explains the failure
+without exposing reason codes. Receipts do not promise production approval,
+customer tracking or automatic notification.
+
+On 2026-10-11, read-only inspection found the live form still used the literal
+workers.dev `<sub>` placeholder and had no Turnstile site key. The documented
+`https://edge-requests.johnnyillinois.workers.dev/v1/requests` answered a CORS
+OPTIONS check with HTTP 204 and allowed POST. That confirms reachability and
+CORS, **not** matching Turnstile configuration or successful intake. This
+session could not read Actions variables (GitHub returned 403). Set/verify the
+public variables and matching Worker/widget configuration before enabling
+customer submissions. No production photos were submitted during validation.
+
+### Validate locally
+
+    python3 -m pip install -r tools/catalog-test-requirements.txt
+    python3 -m playwright install chromium
+    python3 -m unittest discover -s tools -p 'test_catalog.py'
+    python3 tools/test_catalog_guard.py
+    python3 tools/test_catalog_browser.py
+    node --check tools/catalog-assets/catalog.js
+
+The packaging tests require Pillow; browser tests additionally require
+Playwright and Chromium. The pinned test dependencies above are also used by
+`.github/workflows/catalog-tests.yml` on relevant pull requests; that workflow
+uses isolated fixtures and cannot deploy. Browser tests serve isolated bakes
+locally and intercept every external request, including Turnstile and intake.
+They cover discovery, variant navigation, filter/scroll restoration, inline
+validation, upload limits, safe review rendering, multipart fields, failures,
+real receipt IDs, progress, duplicate prevention and layouts from 320 to 1280
+pixels. Generated fixture files stay in temporary directories; no photos,
+geometry or library copies belong in git.

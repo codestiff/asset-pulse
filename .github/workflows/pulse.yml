@@ -99,6 +99,12 @@ jobs:
         env:
           PULSE_BACKLOG: ${{ github.event.inputs.backlog || '0' }}
           PULSE_TRANSFER: "0"
+          # Public settings, not Worker secrets. Missing values disable sending
+          # with an explanation while the catalog continues to publish.
+          CATALOG_INTAKE_URL: ${{ vars.CATALOG_INTAKE_URL }}
+          EDGE_ZONE: ${{ vars.EDGE_ZONE }}
+          TURNSTILE_SITEKEY: ${{ vars.TURNSTILE_SITEKEY }}
+          ITCH_URL: ${{ vars.ITCH_URL }}
           # Resume what the caches hold, and give the explorer's registry bake
           # 45 minutes in all: it ships what finished, the rest named not_baked
           # (row 215; asset-generators feedback names the hang, 49cf1557).

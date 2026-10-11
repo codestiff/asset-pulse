@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """The guard's cases: fewer subjects keep the live catalog; as many or more
-deploy; an unreadable live catalog never blocks. `python3 tools/test_catalog_guard.py`"""
+deploy; an unreadable live catalog is kept. `python3 tools/test_catalog_guard.py`"""
 import functools
 import http.server
 import subprocess
@@ -15,6 +15,15 @@ GUARD = Path(__file__).with_name("catalog_guard.py")
 def site(root, n):
     root.mkdir(parents=True, exist_ok=True)
     (root / "index.html").write_text("<main>" + "".join("<div class=card><a href='subject/x%d/'>x</a></div>" % i for i in range(n)) + "</main>")
+    return root
+
+
+def grouped_site(root, n):
+    root.mkdir(parents=True, exist_ok=True)
+    root.joinpath("index.html").write_text("<main>" + "".join(
+        "<article class=card><a data-catalog-entry='entry%d' href='subject/x%d/'>default</a>"
+        "<details><a data-catalog-entry='entry%d' href='subject/x%d/variant/'>variant</a></details></article>" % (i, i, i + 1, i)
+        for i in range(0, n, 2)) + "</main>")
     return root
 
 
@@ -37,6 +46,9 @@ def main():
         threading.Thread(target=srv.serve_forever, daemon=True).start()
         url = "http://127.0.0.1:%d/" % srv.server_port
         cases = [
+            ("grouped variants preserve 106 entries against 106 legacy cards", grouped_site(t / "grouped", 106), live, 0),
+            ("104 grouped entries cannot replace 106 legacy cards", grouped_site(t / "grouped-fewer", 104), live, 1),
+            ("a legacy catalog cannot shrink a grouped live catalog", site(t / "old-fewer", 104), grouped_site(t / "grouped-live", 106), 1),
             ("a run with fewer subjects (2 against 106) leaves the live catalog as it was", site(t / "a", 2), live, 1),
             ("as many subjects deploy", site(t / "b", 106), live, 0),
             ("more subjects deploy", site(t / "c", 120), live, 0),
