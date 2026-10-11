@@ -68,7 +68,7 @@
     if (!assets.some(asset => asset.category === category)) category = '';
     $('search').value = params.get('q') || '';
     $('sort').value = ['name', 'reverse', 'available'].includes(params.get('sort')) ? params.get('sort') : 'name';
-    $('available').checked = params.get('available') === '1';
+    $('available').checked = params.get('available') !== '0';
     $('discovery').hidden = false;
     $('filters').hidden = false;
     const query = () => {
@@ -76,7 +76,7 @@
       if ($('search').value) p.set('q', $('search').value);
       if (category) p.set('category', category);
       if ($('sort').value !== 'name') p.set('sort', $('sort').value);
-      if ($('available').checked) p.set('available', '1');
+      if (!$('available').checked) p.set('available', '0');
       return p.toString();
     };
     const save = () => writeState({ query: query(), y: window.scrollY,
@@ -110,7 +110,7 @@
     ['search', 'sort', 'available'].forEach(id => $(id).addEventListener(id === 'search' ? 'input' : 'change', () => { render(); save(); }));
     document.querySelectorAll('[data-category]').forEach(button => button.addEventListener('click', () => { category = button.dataset.category; render(); save(); }));
     document.querySelectorAll('[data-clear-filters]').forEach(button => button.addEventListener('click', () => {
-      category = ''; $('search').value = ''; $('available').checked = false; $('sort').value = 'name'; render(); save();
+      category = ''; $('search').value = ''; $('available').checked = true; $('sort').value = 'name'; render(); save();
     }));
     $('filtersToggle').addEventListener('click', () => {
       const on = $('filters').classList.toggle('show'); $('filtersToggle').setAttribute('aria-expanded', String(on));

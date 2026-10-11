@@ -305,6 +305,9 @@ the renderer from the same host as the catalog. A failed fetch or checksum
 stops the build. Viewer failures retain the library renders, show retry controls
 and offer a direct GLB link. Download pages also expose an ordinary ZIP link for
 browsers that do not handle the download attribute.
+The catalog opens with "Downloadable assets only" selected, as in the approved
+prototype. Uncheck it to include builds still in preparation; `?available=0`
+preserves that view in links and on return from a detail page.
 
     python3 -m pip install -r tools/catalog-test-requirements.txt
     python3 -m playwright install chromium

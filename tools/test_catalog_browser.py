@@ -65,13 +65,26 @@ class BrowserTests(unittest.TestCase):
                 else: request.fulfill(status=status, content_type='application/json', headers={'access-control-allow-origin': '*'}, body=json.dumps(body))
             else: request.abort()  # No other external services in regression tests.
         self.page.route('**/*', route)
-        self.page.goto(self.url)
+        self.page.goto(self.url + '?available=0')
 
     def tearDown(self):
         self.assertEqual(self.errors, []); self.context.close()
 
     def shown(self): return self.page.locator('[data-asset]:visible').count()
     def advance(self): self.page.locator('#nextStep').click()
+
+    def test_catalog_opens_on_complete_downloads_with_optional_unfinished_assets(self):
+        self.page.goto(self.url)
+        self.assertTrue(self.page.locator('#available').is_checked())
+        self.assertEqual(self.shown(), 2)
+        self.page.locator('#available').uncheck()
+        self.assertEqual(self.shown(), 3)
+        self.assertIn('available=0', self.page.url)
+        self.page.reload()
+        self.assertEqual(self.shown(), 3)
+        self.page.locator('[data-clear-filters]').first.click()
+        self.assertEqual(self.shown(), 2)
+
     def fill_request(self, wait_for_bot=True):
         self.page.locator('#requestText').fill('<script>window.injected=true</script> A coastal prop')
         self.advance()
