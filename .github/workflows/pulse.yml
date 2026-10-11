@@ -24,6 +24,14 @@ on:
     - cron: "37 5 * * *"
   workflow_dispatch:
     inputs:
+      refresh_catalog:
+        description: "Rebuild the customer site from cached renders and bakes at the committed pins (no new bake)"
+        type: boolean
+        default: false
+      publish:
+        description: "Publish the generated catalog to GitHub Pages (disable for artifact review)"
+        type: boolean
+        default: true
       backlog:
         description: "run the derivation backlog (pushes to the library; needs LIBRARY_TOKEN with write)"
         default: "0"
@@ -61,10 +69,14 @@ jobs:
       - uses: actions/checkout@v4
         id: checkout
       - name: Godot, a virtual display, Pillow, the library
+        if: inputs.refresh_catalog != true
         run: |
           sudo apt-get update -q && sudo apt-get install -y -q xvfb libgl1-mesa-dri >/dev/null
           bash .claude/hooks/session-start.sh
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      - name: Catalog refresh dependencies
+        if: inputs.refresh_catalog == true
+        run: python3 -m pip install Pillow==12.3.0
       # THE PINS FIRST, so the caches below are keyed by them (row 215): an
       # unchanged library pin re-renders nothing, and an unchanged library and
       # explorer pin re-bakes nothing; a run cut short leaves its progress for
@@ -72,19 +84,27 @@ jobs:
       # restored).
       - name: the pins
         id: pins
+        env:
+          REFRESH_CATALOG: ${{ inputs.refresh_catalog }}
         run: |
           export PATH="$HOME/.local/bin:$PATH"
-          tools/sync-library.sh --bump main
+          if [ "$REFRESH_CATALOG" = "true" ]; then
+            tools/sync-library.sh
+          else
+            tools/sync-library.sh --bump main
+          fi
           echo "library=$(sed -n 's/^commit=//p' library.lock)" >> "$GITHUB_OUTPUT"
           echo "explorer=$(sed -n 's/^commit=//p' explorer.lock)" >> "$GITHUB_OUTPUT"
           echo "date=$(date -u +%Y-%m-%d)" >> "$GITHUB_OUTPUT"
       - name: renders done at this library pin
+        id: renders
         uses: actions/cache/restore@v4
         with:
           path: out/render-cache
           key: renders-${{ steps.pins.outputs.library }}-${{ github.run_id }}
           restore-keys: renders-${{ steps.pins.outputs.library }}-
       - name: the bake done at these pins
+        id: bake
         uses: actions/cache/restore@v4
         with:
           path: |
@@ -94,6 +114,16 @@ jobs:
           restore-keys: bake-${{ steps.pins.outputs.library }}-${{ steps.pins.outputs.explorer }}-
       - name: the catalog guard's test
         run: python3 tools/test_catalog_guard.py
+      - name: Require matching cached inputs for a catalog refresh
+        if: inputs.refresh_catalog == true
+        env:
+          RENDER_CACHE: ${{ steps.renders.outputs.cache-matched-key }}
+          BAKE_CACHE: ${{ steps.bake.outputs.cache-matched-key }}
+          LIBRARY_PIN: ${{ steps.pins.outputs.library }}
+        run: |
+          test -n "$RENDER_CACHE" && test -n "$BAKE_CACHE" || { echo "::error::No cached outputs at these pins. Run a normal pulse first."; exit 1; }
+          test "$(cat out/render-cache/render-pin)" = "$LIBRARY_PIN"
+          test -f library/build/artifacts/manifest.json
       - name: the run
         id: run
         env:
@@ -105,6 +135,7 @@ jobs:
           EDGE_ZONE: ${{ vars.EDGE_ZONE }}
           TURNSTILE_SITEKEY: ${{ vars.TURNSTILE_SITEKEY }}
           ITCH_URL: ${{ vars.ITCH_URL }}
+          REFRESH_CATALOG: ${{ inputs.refresh_catalog }}
           # Resume what the caches hold, and give the explorer's registry bake
           # 45 minutes in all: it ships what finished, the rest named not_baked
           # (row 215; asset-generators feedback names the hang, 49cf1557).
@@ -114,7 +145,12 @@ jobs:
           export PATH="$HOME/.local/bin:$PATH"
           DATE="${{ steps.pins.outputs.date }}"
           if [ -f out/render-cache/render-pin ]; then mkdir -p "out/$DATE" && cp -a out/render-cache/. "out/$DATE/"; fi
-          ./run.sh; code=$?
+          if [ "$REFRESH_CATALOG" = "true" ]; then
+            python3 tools/catalog.py "out/$DATE"
+          else
+            ./run.sh
+          fi
+          code=$?
           echo "date=$DATE" >> "$GITHUB_OUTPUT"
           # OPTION A (the owner, 2026-10-10): the public catalog is replaced only by
           # one listing at least as many subjects; a run whose bake was cut short
@@ -127,7 +163,7 @@ jobs:
       # Even when the run was cut short: every subject finished so far, with
       # its status, for the next run at the same pin.
       - name: what this run rendered
-        if: always() && steps.pins.outcome == 'success'
+        if: always() && steps.pins.outcome == 'success' && inputs.refresh_catalog != true
         run: |
           DATE="${{ steps.pins.outputs.date }}"
           rm -rf out/render-cache && mkdir -p out/render-cache
@@ -135,13 +171,13 @@ jobs:
           for d in "out/$DATE"/*/; do [ -f "$d/status" ] && cp -a "$d" out/render-cache/; done
           echo "$(ls out/render-cache | wc -l) entries kept"
       - name: save the renders for this pin
-        if: always() && steps.pins.outcome == 'success'
+        if: always() && steps.pins.outcome == 'success' && inputs.refresh_catalog != true
         uses: actions/cache/save@v4
         with:
           path: out/render-cache
           key: renders-${{ steps.pins.outputs.library }}-${{ github.run_id }}
       - name: save the bake for these pins
-        if: always() && steps.pins.outcome == 'success'
+        if: always() && steps.pins.outcome == 'success' && inputs.refresh_catalog != true
         uses: actions/cache/save@v4
         with:
           path: |
@@ -149,7 +185,7 @@ jobs:
             library/build/artifacts
           key: bake-${{ steps.pins.outputs.library }}-${{ steps.pins.outputs.explorer }}-${{ github.run_id }}
       - name: commit the day's row and the pin
-        if: always() && steps.checkout.outcome == 'success'
+        if: always() && steps.checkout.outcome == 'success' && inputs.refresh_catalog != true
         run: |
           git config user.name "asset-pulse"
           git config user.email "asset-pulse@users.noreply.github.com"
@@ -170,7 +206,7 @@ jobs:
 
   deploy:
     needs: run
-    if: needs.run.outputs.catalog != ''
+    if: needs.run.outputs.catalog != '' && (github.event_name != 'workflow_dispatch' || inputs.publish)
     runs-on: ubuntu-24.04
     environment:
       name: github-pages

@@ -39,6 +39,25 @@ def count(html):
     return len(entries.keys) if entries.keys else len(CARD.findall(html or ""))
 
 
+def downloads(html):
+    """Preview-only cards must not conceal loss of existing downloads."""
+    class Downloads(HTMLParser):
+        def __init__(self):
+            super().__init__()
+            self.keys = set()
+        def handle_starttag(self, tag, attrs):
+            if tag != "a":
+                return
+            attrs = dict(attrs)
+            if attrs.get("data-downloadable") == "true":
+                self.keys.add(attrs.get("data-catalog-entry"))
+            elif "download" in attrs and attrs.get("href", "").endswith(".zip"):
+                self.keys.add(attrs["href"])
+    parser = Downloads()
+    parser.feed(html or "")
+    return len(parser.keys)
+
+
 def read(where):
     if not where.startswith(("http://", "https://")):
         f = Path(where) / "index.html"
@@ -58,7 +77,12 @@ def read(where):
 def main(argv):
     if len(argv) != 3:
         sys.exit(__doc__)
-    new, live = count(read(str(argv[1]))), count(read(str(argv[2])))
+    new_html, live_html = read(str(argv[1])), read(str(argv[2]))
+    new, live = count(new_html), count(live_html)
+    new_downloads, live_downloads = downloads(new_html), downloads(live_html)
+    if new_downloads < live_downloads:
+        print("catalog-guard: KEEP the live catalog -- %d downloads now, %d live" % (new_downloads, live_downloads))
+        return 1
     if new >= live:
         print("catalog-guard: deploy -- %d subject(s) now, %d live" % (new, live))
         return 0

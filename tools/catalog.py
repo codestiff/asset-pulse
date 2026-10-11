@@ -239,6 +239,29 @@ def renders_of(run, gid):
     return sorted(d.glob("*closeup*.png")) if d.exists() else []
 
 
+def catalog_entries(bake):
+    """Discovery comes from committed cards; only the bake supplies files.
+
+    Package targets are library-owned metadata. Keep their tagged variants
+    visible even when a budgeted bake has not reached them yet.
+    """
+    entries = {}
+    for path in sorted((LIB / "generators").glob("*/*.card.json")):
+        card = json.loads(path.read_text())
+        gid = card.get("id")
+        if not gid:
+            continue
+        key = gid.replace("/", "-")
+        entries[key] = {"key": key, "generator": gid, "rungs": []}
+        for target in card.get("package_targets", []):
+            target_gid = target.get("id", gid)
+            tag = target.get("tag", "")
+            target_key = target_gid.replace("/", "-") + ("-" + tag if tag else "")
+            entries[target_key] = {"key": target_key, "generator": target_gid, "rungs": []}
+    entries.update((e["key"], e) for e in bake.get("entries", []))
+    return sorted(entries.values(), key=lambda e: e["key"])
+
+
 def scorecard_rows():
     r = subprocess.run([sys.executable, "tools/scorecard.py", "--json"], cwd=LIB, capture_output=True, text=True)
     if r.returncode != 0 or not r.stdout.strip().startswith("{"):
@@ -283,13 +306,15 @@ def main(argv):
     for asset in (ROOT / "tools" / "catalog-assets").iterdir():
         if asset.suffix in (".css", ".js"):
             shutil.copyfile(asset, site / asset.name)
-    for e in sorted(bake.get("entries", []), key=lambda e: e["key"]):
+    for e in catalog_entries(bake):
         key, gid = e["key"], e.get("generator", e["key"])
         slug = key.replace("/", "_")
         path = subject_path(key, gid)
         L, C = committed(gid)
         rungs = sorted(e.get("rungs", []), key=lambda r: int(r.get("rung", 0)))
-        members, listed, rung0, gaps, no_atlas = [], [], None, [], []
+        members, listed, rung0, gaps, no_atlas, models = [], [], None, [], [], []
+        if not rungs:
+            gaps.append("The downloadable build is not ready yet")
         for r in rungs:
             g = r.get("gltf") or r.get("file")
             if not g or not (bake_dir / g).exists():
@@ -299,8 +324,14 @@ def main(argv):
             name = "%s/rung%d.glb" % (slug, int(r["rung"]))
             members.append((name, data))
             listed.append("%s  (%s triangles%s)" % (name, r.get("triangles", "?"), ", the impostor" if r.get("impostor") else ""))
-            if int(r["rung"]) == 0:
-                rung0 = objs.put(data, ".glb", "gltf")
+            model_url = objs.put(data, ".glb", "gltf")
+            rung = int(r["rung"])
+            names = C.get("rung_names", [])
+            models.append({"url": model_url, "rung": rung,
+                           "name": names[rung] if rung < len(names) else ("Impostor" if r.get("impostor") else "Level %d" % rung),
+                           "triangles": r.get("triangles")})
+            if rung == 0:
+                rung0 = model_url
             if r.get("impostor"):
                 atlas = r.get("atlas_file")
                 if atlas and (bake_dir / atlas).exists():
@@ -311,12 +342,12 @@ def main(argv):
         # A package must carry every declared mesh rung as well as its end.
         expected = int(L.get("mesh_rungs") or 0)
         present = {int(r.get("rung", 0)) for r in rungs}
-        for missing in sorted(set(range(expected)) - present):
+        for missing in sorted(set(range(expected)) - present) if rungs else []:
             gaps.append("rung %d: absent from this bake" % missing)
         # THE LADDER END IS PART OF THE ASSET (the owner, 2026-10-03): name the
         # rung that lacks its impostor atlas, the last rung of the committed
         # ladder when the bake does not carry it at all.
-        if L.get("ladder_end") == "impostor" and not any(
+        if rungs and L.get("ladder_end") == "impostor" and not any(
                 r.get("impostor") and r.get("atlas_file") for r in rungs):
             end = L.get("mesh_rungs", len(rungs))
             if end not in no_atlas:
@@ -356,7 +387,7 @@ def main(argv):
         e = {"key": key, "gid": gid, "slug": slug, "path": path,
              "name": ui.name_of(gid) + (" · " + variant if variant else ""),
              "variant": variant, "facts": facts_of(L, C), "shots": shots,
-             "model": rung0, "download": zip_url, "bytes": len(zipped),
+             "model": rung0, "models": models, "download": zip_url, "bytes": len(zipped),
              "levels": len(rungs), "triangles": next((r.get("triangles") for r in rungs if int(r.get("rung", 0)) == 0), None),
              "contents": listed, "licence_files": ["ATTRIBUTION.txt"] + [n for n, _ in licence_texts],
              "attribution": text, "gaps": gaps, "cost": cost, "error": err}

@@ -278,6 +278,25 @@ session could not read Actions variables (GitHub returned 403). Set/verify the
 public variables and matching Worker/widget configuration before enabling
 customer submissions. No production photos were submitted during validation.
 
+### Catalog discovery and presentation refresh
+
+The catalog lists the pinned library's committed subject cards and tagged
+package targets, including builds a budgeted bake has not reached. These pages
+use available library renders and committed facts; a download is offered only
+after the existing completeness and licensing checks pass. `stone` subjects
+appear under Rocks. Detail-level controls load each actual baked GLB; they do
+not resize a single illustration to simulate different levels.
+
+For a presentation-only rebuild, run the **pulse** workflow with
+`refresh_catalog=true`. It retains the committed library and explorer pins,
+requires matching render/bake caches, and skips rendering, baking, pin updates
+and history commits. Set `publish=false` first to review the `github-pages`
+artifact without deploying; publish the reviewed revision with `publish=true`.
+Only the customer catalog is uploaded. The private scorecard stays private.
+If matching caches are absent, the refresh fails and requires a normal pulse.
+The deployment guard checks both total entries and available downloads, so
+adding preview-only entries cannot hide a decrease in downloadable packages.
+
 ### Validate locally
 
     python3 -m pip install -r tools/catalog-test-requirements.txt
