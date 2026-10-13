@@ -329,3 +329,24 @@ validation, upload limits, safe review rendering, multipart fields, failures,
 real receipt IDs, progress, duplicate prevention and layouts from 320 to 1280
 pixels. Generated fixture files stay in temporary directories; no photos,
 geometry or library copies belong in git.
+
+### Completing terminal impostors
+
+`tools/bake.sh` now runs `tools/catalog_impostors.py` after the registry bake.
+The pinned library exports regular mesh rungs but can omit its separately
+specified terminal impostor. The completion step asks the library's own
+`AgImpostorRung` and `AgBaker` APIs to generate and verify that end; it does not
+change geometry, quality settings, or generator source.
+
+Repair requires every committed mesh rung and its GLB, an existing atlas, and
+an exported end whose index matches the committed ladder. Missing or conflicting
+ladder declarations remain blocked. Existing mesh files are preserved. Failed
+exports leave that entry unchanged and are named in the gitignored
+`library/build/impostor-repair/report.json`. Repeated runs skip completed ends.
+Both library and explorer checkouts must match their lock files and be clean.
+Outputs baked at older pins must not be relabeled as current builds.
+
+To complete an existing bake at the current pins:
+
+    python3 tools/catalog_impostors.py
+    python3 -m unittest discover -s tools -p 'test_catalog_impostors.py'
