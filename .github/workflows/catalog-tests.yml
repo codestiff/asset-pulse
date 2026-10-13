@@ -5,6 +5,7 @@ on:
     paths:
       - 'catalog.json'
       - 'tools/catalog*'
+      - 'tools/bake.sh'
       - 'tools/catalog-assets/**'
       - 'tools/test_catalog*'
       - 'tools/site.py'
@@ -16,6 +17,7 @@ on:
     paths:
       - 'catalog.json'
       - 'tools/catalog*'
+      - 'tools/bake.sh'
       - 'tools/catalog-assets/**'
       - 'tools/test_catalog*'
       - 'tools/site.py'
@@ -46,6 +48,7 @@ jobs:
         run: |
           python -m unittest discover -s tools -p 'test_catalog.py'
           python tools/test_catalog_guard.py
+          python -m unittest discover -s tools -p 'test_catalog_impostors.py'
       - name: Customer browser behavior (isolated fixtures only)
         run: python tools/test_catalog_browser.py
       - name: Real renderer and ZIP downloads (Chromium and WebKit)

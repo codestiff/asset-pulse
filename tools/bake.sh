@@ -113,5 +113,6 @@ if ! registry registry "${ARGS[@]}"; then
   BAKE_LOG="${BAKE_LOG:-$ROOT/out/bake.log}.default" registry default || die "the registry bake failed"
 fi
 [ -f "$LIB/build/artifacts/manifest.json" ] || die "the bake wrote no manifest"
+python3 "$ROOT/tools/catalog_impostors.py" || die "impostor completion failed"
 "$ROOT/tools/sync-library.sh" --verify >/dev/null || die "the bake changed the library's source tree"
 echo "bake: manifest at $LIB/build/artifacts/manifest.json"
